@@ -13,26 +13,22 @@ export interface Transcript {
   turns: { role: "user" | "adversary"; text: string }[];
 }
 
-/** Shape the coach must return (mirrors the SKILL debrief + game scoring). */
+/**
+ * Shape the coach must return — kept LEAN so the debrief generates near-instantly.
+ * (Heavier sections — 4-part consequence framework, "got right", faulty
+ * assumptions, "before you go back" — were trimmed for latency; re-add fields here
+ * + in CoachSchema + DebriefView to restore them.)
+ */
 export interface CoachResult {
   /** One-sentence overall assessment (legal AND commercial). */
   headline: string;
-  /** 0-100 "health" score after gaps, faulty assumptions, and trap penalties. */
+  /** 0-100 "health" score after gaps and trap penalties. */
   score: number;
-  /** Consequence framework — one line each (from the rulebook). */
-  consequences: {
-    civil: string;
-    gdpr: string;
-    financial: string;
-    reputational: string;
-  };
-  gotRight: string[];
-  gaps: { issue: string; legal: string; commercial: string; correct: string }[];
-  faultyAssumptions: string[];
+  /** Top issues missed: what was missed + the gold-standard fix. */
+  gaps: { issue: string; correct: string }[];
   /** Trap clauses the junior picked/defended (penalised). */
   trapsPicked: string[];
   learningPoints: string[];
-  beforeYouGoBack: string[];
 }
 
 export function coachInstructions(
@@ -69,36 +65,28 @@ ${chosen}
 
 HOW TO SCORE
 - "score" is 0-100 health. Start high if they met the gold standard across their
-  chosen clauses AND held the pushback defences; reduce for each gap, faulty
-  assumption, and especially any TRAP clause they picked/defended.
-- Be specific and cite turn numbers. Ground every judgement in the rulebook —
-  no vibes. Never invent law.
-- For each gap: the issue missed, the legal point, the commercial consequence,
-  and the correct position (from the gold standard).
-- Map the overall exposure to the four consequence categories (one line each).
+  chosen clauses AND held the pushback defences; reduce for each gap and especially
+  any TRAP clause they picked/defended.
+- Ground every judgement in the rulebook — no vibes, never invent law.
 
 TRANSCRIPT
 ${transcriptText}
 
 OUTPUT
-Return a single JSON object in exactly this shape. This renders on a card, so be
-TERSE and stay within budget:
-- Every list: at most 3 items — the most important only. Empty ([]) if none.
-- Every string value: ONE short sentence, max ~25 words. No sub-clauses, no
-  citations longer than the article number. The headline and each consequence:
-  one sentence each.
-- Each "gaps" entry: keep issue/legal/commercial/correct to one short phrase each.
-Quality over quantity — a tight, high-signal debrief beats an exhaustive one.
+Return a single JSON object in EXACTLY this shape and NOTHING ELSE. This renders on
+a card and must generate FAST, so keep it tiny:
+- "gaps": at most 2 — the two most important only. Each "issue" and "correct" is
+  ONE short phrase (max ~12 words). Cite only the bare article number.
+- "trapsPicked": the trap clause(s) they defended, else [].
+- "learningPoints": at most 3, each a short phrase (max ~12 words).
+- "headline": one short sentence.
+Do not pad. Do not add fields.
 {
-  "headline": "<one sentence, legal + commercial>",
+  "headline": "<one short sentence, legal + commercial>",
   "score": <0-100 integer>,
-  "consequences": { "civil": "<one line>", "gdpr": "<one line>", "financial": "<one line>", "reputational": "<one line>" },
-  "gotRight": ["<short, turn-referenced>"],
-  "gaps": [ { "issue": "<missed>", "legal": "<legal point>", "commercial": "<consequence>", "correct": "<gold-standard position>" } ],
-  "faultyAssumptions": ["<untested premise + why it matters>"],
-  "trapsPicked": ["<trap clause they defended, or empty>"],
-  "learningPoints": ["<1>", "<2>", "<3>"],
-  "beforeYouGoBack": ["<outstanding issue / question for the client / clause to redraft>"]
+  "gaps": [ { "issue": "<missed, short>", "correct": "<gold-standard fix, short>" } ],
+  "trapsPicked": ["<trap clause defended, or empty>"],
+  "learningPoints": ["<short>", "<short>"]
 }
 `.trim();
 }

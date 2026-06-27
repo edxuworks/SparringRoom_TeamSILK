@@ -70,8 +70,6 @@ export function DebriefView({
     );
   }
 
-  const c = debrief.consequences;
-
   return (
     <section className="flex flex-col gap-5 rounded-2xl border border-[--color-border] bg-white p-6 shadow-[var(--shadow-card)]">
       {/* Health score + headline */}
@@ -99,37 +97,6 @@ export function DebriefView({
         )}
       </div>
 
-      {/* Consequence framework */}
-      <div className="grid gap-2 sm:grid-cols-2">
-        {(
-          [
-            ["Civil liability", c?.civil],
-            ["GDPR breach", c?.gdpr],
-            ["Financial", c?.financial],
-            ["Reputational", c?.reputational],
-          ] as const
-        ).map(([label, text]) =>
-          text ? (
-            <div key={label} className="rounded-lg bg-[--color-surface-soft] p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gold">
-                {label}
-              </p>
-              <p className="mt-1 text-sm text-[--color-text-secondary]">{text}</p>
-            </div>
-          ) : null,
-        )}
-      </div>
-
-      {debrief.gotRight?.length > 0 && (
-        <Block title="What you got right">
-          <ul className="space-y-1 text-sm text-[--color-text-secondary]">
-            {debrief.gotRight.map((g, i) => (
-              <li key={i}>• {g}</li>
-            ))}
-          </ul>
-        </Block>
-      )}
-
       {debrief.gaps?.length > 0 && (
         <Block title="Gaps in your analysis">
           <ul className="space-y-3">
@@ -139,14 +106,7 @@ export function DebriefView({
                 className="rounded-lg border border-[--color-border] p-3 text-sm"
               >
                 <p className="font-medium">{g.issue}</p>
-                <p className="mt-1 text-[--color-text-secondary]">
-                  <span className="text-[--color-text-muted]">Legal:</span> {g.legal}
-                </p>
-                <p className="mt-0.5 text-[--color-text-secondary]">
-                  <span className="text-[--color-text-muted]">Commercial:</span>{" "}
-                  {g.commercial}
-                </p>
-                <p className="mt-0.5 text-[--color-text-primary]">
+                <p className="mt-1 text-[--color-text-primary]">
                   <span className="text-gold">Gold standard:</span> {g.correct}
                 </p>
               </li>
@@ -165,16 +125,6 @@ export function DebriefView({
         </Block>
       )}
 
-      {debrief.faultyAssumptions?.length > 0 && (
-        <Block title="Faulty assumptions">
-          <ul className="space-y-1 text-sm text-[--color-text-secondary]">
-            {debrief.faultyAssumptions.map((f, i) => (
-              <li key={i}>• {f}</li>
-            ))}
-          </ul>
-        </Block>
-      )}
-
       {debrief.learningPoints?.length > 0 && (
         <Block title="Top learning points">
           <ol className="list-decimal space-y-1 pl-5 text-sm text-[--color-text-secondary]">
@@ -182,16 +132,6 @@ export function DebriefView({
               <li key={i}>{l}</li>
             ))}
           </ol>
-        </Block>
-      )}
-
-      {debrief.beforeYouGoBack?.length > 0 && (
-        <Block title="Before you go back to the partner">
-          <ul className="space-y-1 text-sm text-[--color-text-secondary]">
-            {debrief.beforeYouGoBack.map((b, i) => (
-              <li key={i}>• {b}</li>
-            ))}
-          </ul>
         </Block>
       )}
 

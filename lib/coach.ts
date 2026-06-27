@@ -21,28 +21,13 @@ import {
 } from "../prompts/coach";
 import { resolveSetup, type SessionSetup } from "./setup";
 
+// Lean shape (mirrors prompts/coach.ts CoachResult) — small output = fast debrief.
 const CoachSchema = z.object({
   headline: z.string(),
   score: z.number(),
-  consequences: z.object({
-    civil: z.string(),
-    gdpr: z.string(),
-    financial: z.string(),
-    reputational: z.string(),
-  }),
-  gotRight: z.array(z.string()),
-  gaps: z.array(
-    z.object({
-      issue: z.string(),
-      legal: z.string(),
-      commercial: z.string(),
-      correct: z.string(),
-    }),
-  ),
-  faultyAssumptions: z.array(z.string()),
+  gaps: z.array(z.object({ issue: z.string(), correct: z.string() })),
   trapsPicked: z.array(z.string()),
   learningPoints: z.array(z.string()),
-  beforeYouGoBack: z.array(z.string()),
 });
 
 /** JSON schema the model is constrained to (built once; objects are all-required + closed). */
@@ -76,7 +61,7 @@ export async function scoreRound(
     role: "coach",
     rulebook: RULEBOOK,
     instructions,
-    maxTokens: 1800,
+    maxTokens: 700,
     jsonSchema: COACH_JSON_SCHEMA,
     messages: [
       {

@@ -53,8 +53,15 @@ export function modelFor(brain: BrainId, role: Role): string {
   if (brain === "nemotron") {
     return process.env.MODEL_NEMOTRON || "nvidia/nemotron-3-super-120b-a12b";
   }
-  if (role === "coach") return process.env.MODEL_COACH || "claude-sonnet-4-6";
+  // Coach defaults to Haiku — the debrief is latency-sensitive and the JSON is
+  // schema-constrained, so the smaller model is plenty. Override with MODEL_COACH.
+  if (role === "coach") return process.env.MODEL_COACH || "claude-haiku-4-5";
   return process.env.MODEL_ADVERSARY || "claude-sonnet-4-6"; // adversary + amend
+}
+
+/** Haiku rejects the `effort` param; only set it on models that accept it. */
+function effortFor(model: string): "low" | undefined {
+  return model.includes("haiku") ? undefined : "low";
 }
 
 /** Strip Nemotron-style chain-of-thought so it never reaches the user/JSON. */
@@ -116,11 +123,12 @@ export async function* streamBrain({
       ]
     : instructions;
 
+  const effort = effortFor(model);
   const stream = anthropic.messages.stream({
     model,
     max_tokens: maxTokens,
     thinking: { type: "disabled" },
-    output_config: { effort: "low" },
+    ...(effort ? { output_config: { effort } } : {}),
     system,
     messages,
   });
@@ -184,11 +192,15 @@ export async function generateStructured({
       ]
     : instructions;
 
+  const effort = effortFor(model);
   const res = await anthropic.messages.create({
     model,
     max_tokens: maxTokens,
     thinking: { type: "disabled" },
-    output_config: { effort: "low", format: { type: "json_schema", schema: jsonSchema } },
+    output_config: {
+      ...(effort ? { effort } : {}),
+      format: { type: "json_schema", schema: jsonSchema },
+    },
     system,
     messages,
   });
