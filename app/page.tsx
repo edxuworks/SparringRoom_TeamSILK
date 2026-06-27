@@ -253,8 +253,8 @@ function SparringRoom() {
       <div
         className={
           "relative z-10 mx-auto flex min-h-screen w-full flex-1 flex-col px-6 py-10 transition-[max-width] duration-300 " +
-          // Widen the clauses step so the case-context / clauses split has room.
-          (step === "clauses" ? "max-w-5xl" : "max-w-3xl")
+          // Widen the clauses + report steps so their two-column layouts have room.
+          (step === "clauses" || step === "report" ? "max-w-5xl" : "max-w-3xl")
         }
       >
         {!isLanding && (
@@ -385,6 +385,7 @@ function SparringRoom() {
       {step === "report" && (
         <DebriefView
           debrief={debrief}
+          transcript={transcript}
           scoring={scoring}
           error={coachError}
           onRetry={runScoring}

@@ -212,11 +212,7 @@ export async function generateStructured({
     .trim();
 }
 
-export type ToolDef = {
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
-};
+export type ToolDef = Anthropic.Tool;
 
 /**
  * Like generateStructured, but Claude may call tools first (model-driven). Runs a

@@ -13,22 +13,35 @@ export interface Transcript {
   turns: { role: "user" | "adversary"; text: string }[];
 }
 
+/** A single coaching note anchored to a passage of the transcript. */
+export interface CoachAnnotation {
+  /** Index into transcript.turns that this note marks. */
+  turn: number;
+  /** VERBATIM substring copied from that turn — drives the inline highlight. */
+  quote: string;
+  /** Was this passage strong or weak? */
+  verdict: "good" | "bad";
+  /** Short tag, e.g. "Missed Art 28(3)". */
+  label: string;
+  /** 1-2 sentences: why it was good/bad + the fix (rulebook-grounded). */
+  comment: string;
+}
+
 /**
- * Shape the coach must return — kept LEAN so the debrief generates near-instantly.
- * (Heavier sections — 4-part consequence framework, "got right", faulty
- * assumptions, "before you go back" — were trimmed for latency; re-add fields here
- * + in CoachSchema + DebriefView to restore them.)
+ * Shape the coach must return — an annotated transcript: a top-level performance
+ * summary plus notes anchored to specific passages of the round.
  */
 export interface CoachResult {
   /** One-sentence overall assessment (legal AND commercial). */
   headline: string;
   /** 0-100 "health" score after gaps and trap penalties. */
   score: number;
-  /** Top issues missed: what was missed + the gold-standard fix. */
-  gaps: { issue: string; correct: string }[];
-  /** Trap clauses the junior picked/defended (penalised). */
+  /** 2-4 key performance bullets / indicators for the summary header. */
+  summary: string[];
+  /** Notes anchored to transcript passages, ordered by turn. */
+  annotations: CoachAnnotation[];
+  /** Trap clauses the junior picked/defended (penalised) — drives the badge. */
   trapsPicked: string[];
-  learningPoints: string[];
 }
 
 export function coachInstructions(
@@ -70,23 +83,35 @@ HOW TO SCORE
 - Ground every judgement in the rulebook — no vibes, never invent law.
 
 TRANSCRIPT
+Each turn is numbered [i]. Use that number as "turn" in your annotations.
 ${transcriptText}
 
 OUTPUT
-Return a single JSON object in EXACTLY this shape and NOTHING ELSE. This renders on
-a card and must generate FAST, so keep it tiny:
-- "gaps": at most 2 — the two most important only. Each "issue" and "correct" is
-  ONE short phrase (max ~12 words). Cite only the bare article number.
+Return a single JSON object in EXACTLY this shape and NOTHING ELSE. Be TERSE — this
+must generate in 2-3 seconds, so keep it tight:
+- "summary": exactly 2 bullets — the headline indicators (max ~10 words each).
+- "annotations": EXACTLY 2 notes — the two single most important passages — ORDERED by "turn":
+  - "turn": the [i] index of the turn the note is about (mostly the JUNIOR's
+    answers; you may also mark a sharp TECHNICIAN question).
+  - "quote": an EXACT VERBATIM substring copied character-for-character from that
+    turn's text (a short phrase, ~4-10 words). This is highlighted in the UI, so it
+    MUST appear verbatim in the turn — do not paraphrase, reword, or add ellipses.
+  - "verdict": "good" or "bad".
+  - "label": a short tag (max ~5 words), e.g. "Missed Art 28(3)".
+  - "comment": ONE short clause, MAX 10 WORDS — why / the fix. NO lettered lists
+    like "28(3)(d),(f),(g)", NO multi-article citations — at most one bare article
+    number. Example: "Confidentiality alone misses Art 28(3) sub-processor controls."
 - "trapsPicked": the trap clause(s) they defended, else [].
-- "learningPoints": at most 3, each a short phrase (max ~12 words).
-- "headline": one short sentence.
-Do not pad. Do not add fields.
+- "headline": one short sentence (max ~14 words).
+Do not invent quotes. Do not pad. Do not add fields.
 {
-  "headline": "<one short sentence, legal + commercial>",
+  "headline": "<one short sentence>",
   "score": <0-100 integer>,
-  "gaps": [ { "issue": "<missed, short>", "correct": "<gold-standard fix, short>" } ],
-  "trapsPicked": ["<trap clause defended, or empty>"],
-  "learningPoints": ["<short>", "<short>"]
+  "summary": ["<short indicator>", "<short indicator>"],
+  "annotations": [
+    { "turn": <i>, "quote": "<verbatim phrase from turn i>", "verdict": "good|bad", "label": "<short tag>", "comment": "<1-2 sentences, rulebook-grounded>" }
+  ],
+  "trapsPicked": ["<trap clause defended, or empty>"]
 }
 `.trim();
 }

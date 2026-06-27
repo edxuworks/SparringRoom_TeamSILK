@@ -44,13 +44,18 @@ export function OpponentSelect({
               >
                 <span
                   className={
-                    "flex h-16 w-16 items-center justify-center rounded-xl border text-3xl " +
+                    "flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border " +
                     (selected
                       ? "border-gold bg-gold/10"
                       : "border-[--color-border] bg-[--color-surface-soft]")
                   }
                 >
-                  {p.avatar}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={p.image}
+                    alt={p.label}
+                    className="h-full w-full object-contain [image-rendering:pixelated]"
+                  />
                 </span>
                 <span className="font-semibold">{p.label}</span>
                 <span className="text-xs text-[--color-text-secondary]">
