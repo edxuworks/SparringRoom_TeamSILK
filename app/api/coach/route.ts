@@ -2,10 +2,13 @@
  * app/api/coach/route.ts — end-of-round scoring endpoint.
  *
  * Input:  { transcript: { turns: { role: "user" | "adversary", text }[] } }
- * Output: CoachResult (see prompts/coach.ts) — score, batnaHeld, dimensions,
- *         tags, turningPoint, verdict.
+ * Output: CoachResult (see prompts/coach.ts) — headline, score (/100),
+ *         consequences, gotRight, gaps, faultyAssumptions, trapsPicked,
+ *         learningPoints, beforeYouGoBack. (+ fellBack:true if Local→Cloud.)
  *
  * Thin wrapper over lib/coach.ts#scoreRound (shared with the text harness).
+ * The Cloud/Local engine is chosen from setup.engineMode; Local (Nemotron)
+ * failures fall back to Cloud (Claude) so the debrief always renders.
  */
 
 import { NextRequest, NextResponse } from "next/server";

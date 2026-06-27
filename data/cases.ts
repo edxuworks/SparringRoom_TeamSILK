@@ -1,14 +1,14 @@
 /**
  * data/cases.ts — the case registry.
  *
- * v1 ships the demo case derived from the firm rulebook (DEMO DATA playbook):
+ * v1 ships the demo case derived from the firm rulebook (knowledge/ playbook):
  * "Marlin Health Trust v Nemo" — a Data Processing Agreement for processing
  * children's health records through Nemo's AI diagnostics. The junior defends
  * the clauses that structurally protect that data, grilled by "the Technician".
  *
  * IMPORTANT: only user-safe context lives here. The gold-standard answers, what
  * the Technician hunts, the pushback defences, and the scoring all live in the
- * rulebook (lib/skill.ts → DEMO DATA) and are NEVER shown to the user.
+ * rulebook (lib/skill.ts → knowledge/) and are NEVER shown to the user.
  */
 
 import type { Case } from "./case";

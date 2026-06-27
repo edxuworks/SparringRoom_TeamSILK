@@ -11,7 +11,13 @@
  */
 
 import { z } from "zod";
-import { generateStructured, type BrainId } from "./llm";
+import {
+  generateStructured,
+  generateStructuredWithTools,
+  type BrainId,
+  type ToolDef,
+} from "./llm";
+import { lookupAuthority, formatAuthorityForModel } from "./research";
 import { RULEBOOK } from "./skill";
 import { getCase } from "../data/cases";
 import {

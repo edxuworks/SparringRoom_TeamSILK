@@ -1,18 +1,19 @@
 # The Sparring Room — running the MVP
 
-A voice-first negotiation trainer: a lawyer argues a contract clause out loud against an AI opposing counsel that doesn't fold, then gets a scored, Socratic debrief. This is the v1 vertical slice — Claude-only, synthetic placeholder case content, everything domain/infra-specific built behind clean seams (see `Sparring-Room-MVP-Spec.md` §7 and the plan).
+A voice-first hot-seat trainer: a junior lawyer defends contract clauses out loud against "the Technician" — an AI that interrogates and won't fold — then gets a scored debrief graded against the firm rulebook. The reasoning brain runs **Cloud** (Claude) or **Local** (NVIDIA Nemotron via OpenRouter) via the in-app toggle. Synthetic placeholder case content; everything domain/infra-specific sits behind clean seams (see `docs/MVP-Spec.md`).
 
 ## 1. Add your keys
 
-Edit `.env.local`:
+Copy `.env.local.example` to `.env.local` and fill it in:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ELEVENLABS_API_KEY=...
 ELEVENLABS_AGENT_ID=...        # filled in step 3
+OPENROUTER_API_KEY=sk-or-...   # only needed for Local (Sovereign) mode
 ```
 
-Models are pinned via `MODEL_ADVERSARY=claude-sonnet-4-6` (fast, for the live call) and `MODEL_COACH=claude-opus-4-8` (quality, post-round). Override either via env.
+Cloud models are pinned via `MODEL_ADVERSARY` / `MODEL_COACH` (both default `claude-sonnet-4-6`; swap the coach to `claude-opus-4-8` for max nuance). Local uses `MODEL_NEMOTRON`. Override any via env — see `lib/llm.ts`.
 
 ## 2. Test the brain with zero voice cost
 
@@ -20,7 +21,7 @@ Models are pinned via `MODEL_ADVERSARY=claude-sonnet-4-6` (fast, for the live ca
 npm run harness          # typed negotiation in the terminal; /coach to score, /quit to exit
 ```
 
-Confirm the adversary argues, probes weak points, and doesn't fold to bare confidence; `/coach` returns a structured debrief and the BATNA gate caps the score if you concede uncapped data-breach liability.
+Confirm the Technician interrogates, probes weak points, and doesn't fold to bare confidence; `/coach` returns a structured debrief scored against the firm rulebook (and penalised if you defend a trap clause).
 
 You can also drive the brain in the browser: `npm run dev` → open http://localhost:3000 → toggle **Typed** → Start Round. (No tunnel needed for typed mode.)
 
@@ -49,11 +50,11 @@ Open http://localhost:3000 → **Voice** mode → Start Round → grant mic → 
 
 ```
 mic -> ElevenLabs agent --(OpenAI /v1/chat/completions, SSE)--> /api/llm  (the shim)
-         shim injects case + GDPR grounding + game-state, calls Claude Sonnet, streams back
-End Round -> /api/coach -> Claude Opus (zod structured output) -> debrief card
+         shim injects case + firm rulebook + game-state, calls the brain, streams back
+End Round -> /api/coach -> the brain (zod structured output) -> debrief card
 ```
 
-Key files: `prompts/{adversary,coach}.ts`, `data/{case,playbook,grounding,rubric}.ts` (all synthetic placeholders), `lib/{llm,coach,openaiCompat,gameState}.ts`, `app/api/{llm,coach,adversary,elevenlabs/signed-url}/...`, `app/page.tsx`.
+The "brain" is Cloud (Claude) or Local (Nemotron via OpenRouter), chosen by the in-app toggle (`lib/llm.ts`). Key files: `prompts/{hotseat,coach}.ts`, `data/{case,cases,personas,difficulties}.ts` (synthetic placeholders), `knowledge/` (firm rulebook, loaded by `lib/skill.ts`), `lib/{llm,coach,setup,skill,openaiCompat,gameState}.ts`, `app/api/{llm,coach,adversary,admin,elevenlabs/signed-url}/...`, `app/page.tsx`.
 
 ## Verification checklist
 
@@ -68,9 +69,11 @@ Key files: `prompts/{adversary,coach}.ts`, `data/{case,playbook,grounding,rubric
 | Placeholder (v1) | Swaps to | Seam |
 |---|---|---|
 | `lib/gameState.ts` in-memory | **Neo4j** argument graph + path scoring | gameState interface |
-| coach / adversary = Claude | **NVIDIA Nemotron** (independent judge / Sovereign-Mode on-prem) | `lib/llm.ts` role→model map |
-| `data/grounding.ts` GDPR stub | **EU Cellar API** live fetch | `fetchGrounding()` |
-| (none) | **Perplexity Sonar** current-topic research | unused `research` role |
-| synthetic case/playbook/rubric | lawyer-authored content | `data/*` modules |
+| Local = Nemotron via OpenRouter | **on-prem GPU** (true sovereign deployment) | `lib/llm.ts` brain map |
+| `data/grounding.ts` GDPR stub | **EU Cellar API** live fetch | `fetchGrounding()` (currently unused) |
+| (none) | **Perplexity Sonar** current-topic research | future `research` role |
+| synthetic case + placeholder rulebook | lawyer-authored content | `data/*` + `knowledge/*` |
 
-*All `data/` and `prompts/` content is synthetic placeholder, clearly labelled, and is not legal advice.*
+*Cloud/Local model switching already ships via the in-app toggle — see `lib/llm.ts` and `components/EngineToggle.tsx`.*
+
+*All `data/`, `prompts/`, and `knowledge/` content is synthetic placeholder, clearly labelled, and is not legal advice.*

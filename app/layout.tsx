@@ -1,3 +1,10 @@
+/**
+ * app/layout.tsx — root layout: fonts, global styles, metadata.
+ *
+ * Typography matches legora.com (the challenge host): Inter for body/UI, an
+ * editorial serif for display headings. Both font CSS variables are exposed on
+ * <html> and consumed via the --font-body / --font-heading tokens in globals.css.
+ */
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";

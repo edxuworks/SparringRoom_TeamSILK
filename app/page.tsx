@@ -250,7 +250,13 @@ function SparringRoom() {
     <main className="relative flex min-h-screen flex-col overflow-hidden bg-white text-[--color-text-primary] transition-colors duration-300">
       <GreekHallBackground faded={!isLanding} dark={setup.engineMode === "local"} />
 
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-3xl flex-1 flex-col px-6 py-10">
+      <div
+        className={
+          "relative z-10 mx-auto flex min-h-screen w-full flex-1 flex-col px-6 py-10 transition-[max-width] duration-300 " +
+          // Widen the clauses step so the case-context / clauses split has room.
+          (step === "clauses" ? "max-w-5xl" : "max-w-3xl")
+        }
+      >
         {!isLanding && (
           <header className="mb-6 flex items-center justify-between gap-3 border-b border-gold/30 pb-3">
             <span className="font-heading text-xl font-semibold tracking-tight">

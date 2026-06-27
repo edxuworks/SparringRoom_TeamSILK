@@ -36,7 +36,7 @@ export interface Clause {
   /**
    * Trap clause: belongs elsewhere (e.g. the commercial agreement, not the DPA).
    * Not surfaced to the user; the Technician interrogates the choice and the
-   * debrief penalises it. See the firm rulebook (DEMO DATA playbook §4).
+   * debrief penalises it. See the firm rulebook (knowledge/ playbook §4).
    */
   isTrap?: boolean;
 }

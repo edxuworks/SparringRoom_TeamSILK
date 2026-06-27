@@ -212,6 +212,89 @@ export async function generateStructured({
     .trim();
 }
 
+export type ToolDef = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+};
+
+/**
+ * Like generateStructured, but Claude may call tools first (model-driven). Runs a
+ * bounded tool loop: each `tool_use` is handed to `onToolCall`, the result is fed
+ * back, and the final reply is still schema-constrained JSON. Claude-only — the
+ * Nemotron path has no tool support, so callers keep it offline (Sovereign mode).
+ */
+export async function generateStructuredWithTools({
+  role = "coach",
+  rulebook,
+  instructions,
+  messages,
+  maxTokens = 1200,
+  jsonSchema,
+  tools,
+  onToolCall,
+  maxSteps = 4,
+}: StructuredArgs & {
+  tools: ToolDef[];
+  onToolCall: (name: string, input: unknown) => Promise<string>;
+  maxSteps?: number;
+}): Promise<string> {
+  const model = modelFor("claude", role);
+  const effort = effortFor(model);
+  const system = rulebook
+    ? [
+        { type: "text" as const, text: rulebook, cache_control: { type: "ephemeral" as const, ttl: "1h" as const } },
+        { type: "text" as const, text: instructions },
+      ]
+    : instructions;
+
+  const convo: Anthropic.MessageParam[] = messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+
+  for (let step = 0; step < maxSteps; step++) {
+    const res = await anthropic.messages.create({
+      model,
+      max_tokens: maxTokens,
+      thinking: { type: "disabled" },
+      output_config: {
+        ...(effort ? { effort } : {}),
+        format: { type: "json_schema", schema: jsonSchema },
+      },
+      system,
+      tools,
+      messages: convo,
+    });
+
+    if (res.stop_reason === "tool_use") {
+      convo.push({ role: "assistant", content: res.content });
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const block of res.content) {
+        if (block.type === "tool_use") {
+          let out: string;
+          try {
+            out = await onToolCall(block.name, block.input);
+          } catch (e) {
+            out = `Lookup failed: ${e instanceof Error ? e.message : String(e)}. Rely on the firm rulebook.`;
+          }
+          results.push({ type: "tool_result", tool_use_id: block.id, content: out });
+        }
+      }
+      convo.push({ role: "user", content: results });
+      continue;
+    }
+
+    return res.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
+  }
+
+  throw new Error("Coach tool loop exceeded max steps.");
+}
+
 // --- Adversary (Technician) convenience wrappers, now brain-aware ---
 
 export function streamAdversary(

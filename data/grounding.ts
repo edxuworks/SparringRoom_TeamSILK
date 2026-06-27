@@ -7,6 +7,10 @@
  *
  * This makes the adversary's GDPR argument credible in the demo while staying
  * honestly labelled. NOT legal advice.
+ *
+ * NOTE: currently UNUSED — the live grounding the app relies on is the firm
+ * rulebook in knowledge/ (lib/skill.ts). This module is kept as the seam for the
+ * future EU Cellar integration; nothing imports it yet.
  */
 
 export interface Grounding {
