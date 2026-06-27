@@ -1,67 +1,80 @@
 /**
- * lib/coach.ts — end-of-round scoring (shared by /api/coach and the text harness).
+ * lib/coach.ts — end-of-round DEBRIEF (shared by /api/coach and the harness).
  *
- * The coach prompt already demands strict JSON in the exact CoachResult shape, so
- * we generate free-form (NO structured-output constrained decoding) and validate
- * the parsed JSON with zod, retrying once on failure. Constrained decoding is
- * accurate but adds a heavy per-token latency tax (~2x); free-form + validate is
- * far faster for the same reliable result here. thinking off + effort low keeps
- * it snappy — scoring is against an explicit rubric, not open reasoning.
+ * Grounded in the firm RULEBOOK (skill debrief format + playbook gold standard +
+ * consequence framework), injected as a CACHED system block. The prompt demands
+ * strict JSON, so we generate free-form (no constrained-decoding latency tax) and
+ * validate with zod, retrying once. thinking off + effort low keeps it snappy.
  *
- * SWAP point: this is the natural home for NVIDIA Nemotron later — a different
- * model family grading the round than the one that generated it, avoiding
- * correlated blind spots.
+ * SWAP point: natural home for an independent NVIDIA Nemotron judge later.
  */
 
 import { z } from "zod";
 import { anthropic, modelFor } from "./llm";
-import { CASE } from "../data/case";
-import { PLAYBOOK } from "../data/playbook";
-import { RUBRIC } from "../data/rubric";
+import { RULEBOOK } from "./skill";
+import { getCase } from "../data/cases";
 import {
-  coachSystemPrompt,
+  coachInstructions,
   type CoachResult,
   type Transcript,
 } from "../prompts/coach";
+import { resolveSetup, type SessionSetup } from "./setup";
 
 const CoachSchema = z.object({
+  headline: z.string(),
   score: z.number(),
-  batnaHeld: z.boolean(),
-  dimensions: z.array(
+  consequences: z.object({
+    civil: z.string(),
+    gdpr: z.string(),
+    financial: z.string(),
+    reputational: z.string(),
+  }),
+  gotRight: z.array(z.string()),
+  gaps: z.array(
     z.object({
-      name: z.string(),
-      score: z.number(),
-      comment: z.string().optional(), // omitted on the fast path (see prompt)
+      issue: z.string(),
+      legal: z.string(),
+      commercial: z.string(),
+      correct: z.string(),
     }),
   ),
-  tags: z.array(z.string()),
-  turningPoint: z.object({
-    turn: z.number(),
-    what: z.string(),
-    betterMove: z.string(),
-  }),
-  verdict: z.string(),
+  faultyAssumptions: z.array(z.string()),
+  trapsPicked: z.array(z.string()),
+  learningPoints: z.array(z.string()),
+  beforeYouGoBack: z.array(z.string()),
 });
 
 /** Score a round and return the structured debrief. Throws if both attempts fail. */
-export async function scoreRound(transcript: Transcript): Promise<CoachResult> {
-  const system = coachSystemPrompt(CASE, PLAYBOOK, RUBRIC, transcript);
+export async function scoreRound(
+  transcript: Transcript,
+  setupOrCaseId?: Partial<SessionSetup> | string,
+): Promise<CoachResult> {
+  const setup = resolveSetup(
+    typeof setupOrCaseId === "string"
+      ? { caseId: setupOrCaseId }
+      : setupOrCaseId,
+  );
+  const caseData = getCase(setup.caseId);
+  const chosenClauses = caseData.clauses.filter((c) =>
+    setup.clauseIds.includes(c.id),
+  );
+  const instructions = coachInstructions(caseData, transcript, chosenClauses);
 
   async function attempt(nudge = ""): Promise<CoachResult | null> {
     const response = await anthropic.messages.create({
       model: modelFor("coach"),
       max_tokens: 2000,
-      // Scoring is against an explicit rubric, so deep thinking isn't needed.
-      // Free-form generation (no constrained decoding) for speed; validated below.
-      // For different latency/quality, change MODEL_COACH in .env.local.
       thinking: { type: "disabled" },
       output_config: { effort: "low" },
-      system,
+      system: [
+        { type: "text", text: RULEBOOK, cache_control: { type: "ephemeral" } },
+        { type: "text", text: instructions },
+      ],
       messages: [
         {
           role: "user",
           content:
-            "Score the round now and return the debrief as a single raw JSON object (no markdown, no code fences, no prose). For dimensions give name and score ONLY — no comment field. Put your specific, turn-referenced coaching into the turningPoint (what + betterMove), the two tags, and the one-line verdict. Keep verdict and each turning-point field to one sentence." +
+            "Produce the debrief now as a single raw JSON object (no markdown, no code fences, no prose), in the exact required shape." +
             nudge,
         },
       ],
@@ -88,7 +101,9 @@ export async function scoreRound(transcript: Transcript): Promise<CoachResult> {
 
   const first = await attempt();
   if (first) return first;
-  const second = await attempt(" Return ONLY valid JSON matching the exact required shape.");
+  const second = await attempt(
+    " Return ONLY valid JSON matching the exact required shape.",
+  );
   if (second) return second;
   throw new Error("Coach failed to return a valid debrief.");
 }

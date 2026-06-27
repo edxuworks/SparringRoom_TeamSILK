@@ -36,22 +36,27 @@ export function modelFor(role: Role): string {
 }
 
 /**
- * Stream the adversary's next spoken turn as text deltas.
+ * Stream the Technician's next spoken turn as text deltas.
  *
- * Tuned for time-to-first-token: thinking disabled, low effort, short cap
- * (the adversary speaks 2-4 sentences). Used by the /api/llm shim and the
- * terminal text-harness.
+ * `rulebook` is the large STATIC skill+checklist+playbook prefix — sent as a
+ * cached system block (`cache_control: ephemeral`) so repeated turns are fast
+ * and cheap. `instructions` is the small volatile per-round block. Tuned for
+ * time-to-first-token: thinking disabled, low effort, short cap.
  */
 export async function* streamAdversary(
-  system: string,
+  rulebook: string,
+  instructions: string,
   messages: ChatMessage[],
 ): AsyncGenerator<string> {
   const stream = anthropic.messages.stream({
     model: modelFor("adversary"),
-    max_tokens: 400,
+    max_tokens: 500,
     thinking: { type: "disabled" },
     output_config: { effort: "low" },
-    system,
+    system: [
+      { type: "text", text: rulebook, cache_control: { type: "ephemeral" } },
+      { type: "text", text: instructions },
+    ],
     messages,
   });
 
@@ -65,12 +70,14 @@ export async function* streamAdversary(
   }
 }
 
-/** Non-streaming convenience: collect the adversary's full turn as a string. */
+/** Non-streaming convenience: collect the Technician's full turn as a string. */
 export async function generateAdversary(
-  system: string,
+  rulebook: string,
+  instructions: string,
   messages: ChatMessage[],
 ): Promise<string> {
   let out = "";
-  for await (const delta of streamAdversary(system, messages)) out += delta;
+  for await (const delta of streamAdversary(rulebook, instructions, messages))
+    out += delta;
   return out.trim();
 }

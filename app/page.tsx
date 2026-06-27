@@ -1,28 +1,60 @@
 "use client";
 
 /**
- * app/page.tsx — The Sparring Room (single-page call screen + debrief card).
+ * app/page.tsx — The Sparring Room, junior-lawyer flow.
  *
- * Two views: the negotiation call and the scored debrief. Two modes:
- *  - Voice (ElevenLabs): the real vertical slice.
- *  - Typed fallback: drives the same adversary + debrief without voice minutes,
- *    so the brain is always demoable even if voice is flaky.
+ * A step wizard (wireframe): user type → case → opponent → context+clauses →
+ * voice round → feedback report. Everything runs under one ConversationProvider
+ * so the ElevenLabs session stays mounted across steps. Per-round selections
+ * (SessionSetup) flow into the round: voice via customLlmExtraBody, typed via the
+ * /api/adversary body, and into /api/coach via caseId.
+ *
+ * All domain content (case, personas, difficulty, clauses, feedback) is
+ * PLACEHOLDER — lawyer-authored versions swap in behind the same seams.
  */
 
 import { useCallback, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
-import { CASE } from "@/data/case";
 import type { CoachResult } from "@/prompts/coach";
+import { CASES, getCase } from "@/data/cases";
+import { getPersona, DEFAULT_PERSONA_ID } from "@/data/personas";
+import { getDifficulty, DEFAULT_DIFFICULTY_ID } from "@/data/difficulties";
+import type { SessionSetup } from "@/lib/setup";
+import type { Turn, Mode } from "@/components/types";
+import { GreekHallBackground } from "@/components/GreekHallBackground";
+import { UserTypeScreen } from "@/components/UserTypeScreen";
+import { AdminUpload } from "@/components/AdminUpload";
+import { AdminDone } from "@/components/AdminDone";
+import { CaseSelect } from "@/components/CaseSelect";
+import { OpponentSelect } from "@/components/OpponentSelect";
+import { ContextClauses } from "@/components/ContextClauses";
+import { CallView } from "@/components/CallView";
+import { DebriefView } from "@/components/DebriefView";
 
-type Turn = { role: "user" | "adversary"; text: string };
-type View = "call" | "debrief";
-type Mode = "voice" | "text";
+type Step =
+  | "userType"
+  | "adminUpload"
+  | "adminDone"
+  | "caseSelect"
+  | "opponent"
+  | "clauses"
+  | "round"
+  | "report";
 
 const TEXT_OPENER =
-  "Shall we start with the liability cap? My client won't accept your 12-month figure — given our GDPR exposure we need uncapped liability on data-protection breaches.";
+  "Before we start — what's your headline read on this DPA from a data-protection perspective? Biggest risk, what it means for the Trust commercially, and your recommended position. Sixty seconds.";
 
 function SparringRoom() {
-  const [view, setView] = useState<View>("call");
+  const [step, setStep] = useState<Step>("userType");
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
+  const [setup, setSetup] = useState<SessionSetup>({
+    caseId: CASES[0].id,
+    personaId: DEFAULT_PERSONA_ID,
+    difficultyId: DEFAULT_DIFFICULTY_ID,
+    clauseIds: [],
+  });
+
+  // --- round state ---
   const [mode, setMode] = useState<Mode>("voice");
   const [transcript, setTranscript] = useState<Turn[]>([]);
   const [debrief, setDebrief] = useState<CoachResult | null>(null);
@@ -33,6 +65,8 @@ function SparringRoom() {
   const [error, setError] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
   const transcriptRef = useRef<Turn[]>([]);
+
+  const caseData = getCase(setup.caseId);
 
   const pushTurn = useCallback((t: Turn) => {
     transcriptRef.current = [...transcriptRef.current, t];
@@ -50,7 +84,7 @@ function SparringRoom() {
     },
   });
 
-  // --- Voice ---
+  // --- voice ---
   const startVoice = useCallback(async () => {
     setError(null);
     setConnecting(true);
@@ -59,16 +93,29 @@ function SparringRoom() {
       const res = await fetch("/api/elevenlabs/signed-url");
       if (!res.ok) throw new Error((await res.json()).error || "signed-url failed");
       const { signedUrl } = await res.json();
-      await conversation.startSession({ signedUrl });
+      // The chosen clauses fill the baked agent's {{focus_clauses}} placeholder
+      // (Option 1, Qwen). customLlmExtraBody still carries the full setup for the
+      // shim path (Option 2, when re-pointed to custom LLM).
+      const chosen = caseData.clauses.filter((c) =>
+        setup.clauseIds.includes(c.id),
+      );
+      const focus_clauses = chosen.length
+        ? chosen.map((c) => `- ${c.label}`).join("\n")
+        : "No specific clauses chosen — test their overall analysis.";
+      await conversation.startSession({
+        signedUrl,
+        dynamicVariables: { focus_clauses },
+        customLlmExtraBody: setup,
+      });
       setStarted(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setConnecting(false);
     }
-  }, [conversation]);
+  }, [conversation, setup, caseData]);
 
-  // --- Typed fallback ---
+  // --- typed fallback ---
   const startText = useCallback(() => {
     setError(null);
     transcriptRef.current = [{ role: "adversary", text: TEXT_OPENER }];
@@ -92,7 +139,7 @@ function SparringRoom() {
       const res = await fetch("/api/adversary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({ messages, setup }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "adversary failed");
       const { reply } = await res.json();
@@ -102,9 +149,9 @@ function SparringRoom() {
     } finally {
       setThinking(false);
     }
-  }, [textInput, thinking, pushTurn]);
+  }, [textInput, thinking, pushTurn, setup]);
 
-  // --- End round -> coach ---
+  // --- end round -> coach -> report ---
   const endRound = useCallback(async () => {
     if (mode === "voice") {
       try {
@@ -119,12 +166,15 @@ function SparringRoom() {
       return;
     }
     setScoring(true);
-    setView("debrief");
+    setStep("report");
     try {
       const res = await fetch("/api/coach", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: { turns: transcriptRef.current } }),
+        body: JSON.stringify({
+          transcript: { turns: transcriptRef.current },
+          setup,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "coach failed");
       setDebrief((await res.json()) as CoachResult);
@@ -133,316 +183,164 @@ function SparringRoom() {
     } finally {
       setScoring(false);
     }
-  }, [mode, conversation]);
+  }, [mode, conversation, setup]);
 
-  const goAgain = useCallback(() => {
+  const resetRound = useCallback(() => {
     transcriptRef.current = [];
     setTranscript([]);
     setDebrief(null);
     setError(null);
-    setView("call");
     setStarted(false);
+    setTextInput("");
   }, []);
 
+  const goAgain = useCallback(() => {
+    resetRound();
+    setStep("caseSelect");
+  }, [resetRound]);
+
+  const toggleClause = useCallback((id: string) => {
+    setSetup((s) => ({
+      ...s,
+      clauseIds: s.clauseIds.includes(id)
+        ? s.clauseIds.filter((x) => x !== id)
+        : [...s.clauseIds, id],
+    }));
+  }, []);
+
+  const isLanding = step === "userType";
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">The Sparring Room</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          Practise under pressure against an AI that fights back.
-        </p>
-      </header>
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-white text-[--color-text-primary]">
+      <GreekHallBackground faded={!isLanding} />
 
-      {/* Case banner */}
-      <section className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm">
-        <p className="font-medium">
-          You act for {CASE.userParty.name} (the {CASE.userParty.role}).
-        </p>
-        <p className="mt-1 text-neutral-600">{CASE.issue}</p>
-      </section>
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-3xl flex-1 flex-col px-6 py-10">
+        {!isLanding && (
+          <header className="mb-6 flex items-center gap-3 border-b border-gold/30 pb-3">
+            <span className="font-heading text-xl font-semibold tracking-tight">
+              The Sparring Room
+            </span>
+          </header>
+        )}
 
-      {error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        {error && (
+          <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+
+        {isLanding ? (
+          <div className="flex flex-1 flex-col items-center justify-center">
+            <UserTypeScreen
+              onJunior={() => setStep("caseSelect")}
+              onAdmin={() => setStep("adminUpload")}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-6">
+
+      {step === "adminUpload" && (
+        <AdminUpload
+          onBack={() => setStep("userType")}
+          onGenerated={(name) => {
+            setUploadedName(name);
+            setStep("adminDone");
+          }}
+        />
       )}
 
-      {view === "call" ? (
-        <CallView
-          mode={mode}
-          setMode={setMode}
-          started={started}
-          connecting={connecting}
-          conversation={conversation}
-          transcript={transcript}
-          thinking={thinking}
-          textInput={textInput}
-          setTextInput={setTextInput}
-          onStartVoice={startVoice}
-          onStartText={startText}
-          onSendText={sendText}
-          onEndRound={endRound}
+      {step === "adminDone" && (
+        <AdminDone
+          filename={uploadedName}
+          onTest={() => {
+            resetRound();
+            setStep("caseSelect");
+          }}
+          onReupload={() => setStep("adminUpload")}
         />
-      ) : (
+      )}
+
+      {step === "caseSelect" && (
+        <CaseSelect
+          cases={CASES}
+          selectedId={setup.caseId}
+          onSelect={(id) => setSetup((s) => ({ ...s, caseId: id }))}
+          onNext={() => setStep("opponent")}
+          onBack={() => setStep("userType")}
+        />
+      )}
+
+      {step === "opponent" && (
+        <OpponentSelect
+          personaId={setup.personaId}
+          difficultyId={setup.difficultyId}
+          onPersona={(id) => setSetup((s) => ({ ...s, personaId: id }))}
+          onDifficulty={(id) => setSetup((s) => ({ ...s, difficultyId: id }))}
+          onNext={() => setStep("clauses")}
+          onBack={() => setStep("caseSelect")}
+        />
+      )}
+
+      {step === "clauses" && (
+        <ContextClauses
+          caseData={caseData}
+          clauseIds={setup.clauseIds}
+          onToggleClause={toggleClause}
+          onNext={() => setStep("round")}
+          onBack={() => setStep("opponent")}
+        />
+      )}
+
+      {step === "round" && (
+        <>
+          {/* Compact context banner for the chosen setup */}
+          <section className="rounded-2xl border border-[--color-border] bg-[--color-surface-soft] p-4 text-sm shadow-[var(--shadow-soft)]">
+            <p className="font-medium">
+              {caseData.title} — you act for {caseData.userParty.name}
+            </p>
+            <p className="mt-1 text-[--color-text-secondary]">
+              The Technician · {getPersona(setup.personaId).label} ·{" "}
+              {getDifficulty(setup.difficultyId).label}
+            </p>
+          </section>
+
+          {!started && (
+            <button
+              onClick={() => {
+                resetRound();
+                setStep("clauses");
+              }}
+              className="self-start rounded-lg border border-[--color-border-strong] px-4 py-2 text-sm font-medium hover:bg-[--color-surface-soft]"
+            >
+              ← Back
+            </button>
+          )}
+
+          <CallView
+            mode={mode}
+            setMode={setMode}
+            started={started}
+            connecting={connecting}
+            conversation={conversation}
+            transcript={transcript}
+            thinking={thinking}
+            textInput={textInput}
+            setTextInput={setTextInput}
+            onStartVoice={startVoice}
+            onStartText={startText}
+            onSendText={sendText}
+            onEndRound={endRound}
+          />
+        </>
+      )}
+
+      {step === "report" && (
         <DebriefView debrief={debrief} scoring={scoring} onGoAgain={goAgain} />
       )}
+          </div>
+        )}
+      </div>
     </main>
-  );
-}
-
-function CallView(props: {
-  mode: Mode;
-  setMode: (m: Mode) => void;
-  started: boolean;
-  connecting: boolean;
-  conversation: ReturnType<typeof useConversation>;
-  transcript: Turn[];
-  thinking: boolean;
-  textInput: string;
-  setTextInput: (s: string) => void;
-  onStartVoice: () => void;
-  onStartText: () => void;
-  onSendText: () => void;
-  onEndRound: () => void;
-}) {
-  const {
-    mode,
-    setMode,
-    started,
-    connecting,
-    conversation,
-    transcript,
-    thinking,
-    textInput,
-    setTextInput,
-    onStartVoice,
-    onStartText,
-    onSendText,
-    onEndRound,
-  } = props;
-
-  const status =
-    mode === "voice"
-      ? conversation.isSpeaking
-        ? "AI speaking…"
-        : conversation.status === "connected"
-          ? "Listening…"
-          : conversation.status
-      : thinking
-        ? "AI thinking…"
-        : "Your move";
-
-  return (
-    <section className="flex flex-col gap-4">
-      {!started && (
-        <div className="flex items-center gap-2">
-          <ModeToggle mode={mode} setMode={setMode} />
-        </div>
-      )}
-
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-neutral-500">
-          {started ? status : "Ready"}
-        </span>
-        {!started ? (
-          mode === "voice" ? (
-            <button
-              onClick={onStartVoice}
-              disabled={connecting}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {connecting ? "Connecting…" : "Start Round (voice)"}
-            </button>
-          ) : (
-            <button
-              onClick={onStartText}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              Start Round (typed)
-            </button>
-          )
-        ) : (
-          <button
-            onClick={onEndRound}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white"
-          >
-            End Round
-          </button>
-        )}
-      </div>
-
-      {/* Transcript */}
-      <div className="flex min-h-[280px] flex-col gap-3 rounded-xl border border-neutral-200 p-4">
-        {transcript.length === 0 ? (
-          <p className="m-auto text-sm text-neutral-400">
-            {mode === "voice"
-              ? "Grant your mic and start the round. Opposing counsel will open."
-              : "Start the round and type your first move."}
-          </p>
-        ) : (
-          transcript.map((t, i) => (
-            <div
-              key={i}
-              className={t.role === "user" ? "text-right" : "text-left"}
-            >
-              <span className="mb-0.5 block text-xs text-neutral-400">
-                {t.role === "user" ? "You" : "Opposing counsel"}
-              </span>
-              <span
-                className={
-                  "inline-block max-w-[85%] rounded-2xl px-3 py-2 text-sm " +
-                  (t.role === "user"
-                    ? "bg-neutral-900 text-white"
-                    : "bg-neutral-100 text-neutral-900")
-                }
-              >
-                {t.text}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Typed input */}
-      {started && mode === "text" && (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSendText();
-          }}
-          className="flex gap-2"
-        >
-          <input
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            placeholder="Your negotiation turn…"
-            className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={thinking}
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            Send
-          </button>
-        </form>
-      )}
-    </section>
-  );
-}
-
-function ModeToggle({
-  mode,
-  setMode,
-}: {
-  mode: Mode;
-  setMode: (m: Mode) => void;
-}) {
-  return (
-    <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 text-sm">
-      {(["voice", "text"] as Mode[]).map((m) => (
-        <button
-          key={m}
-          onClick={() => setMode(m)}
-          className={
-            "rounded-md px-3 py-1 " +
-            (mode === m ? "bg-neutral-900 text-white" : "text-neutral-600")
-          }
-        >
-          {m === "voice" ? "Voice" : "Typed"}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function DebriefView({
-  debrief,
-  scoring,
-  onGoAgain,
-}: {
-  debrief: CoachResult | null;
-  scoring: boolean;
-  onGoAgain: () => void;
-}) {
-  if (scoring || !debrief) {
-    return (
-      <section className="flex min-h-[280px] items-center justify-center rounded-xl border border-neutral-200">
-        <p className="text-sm text-neutral-500">Scoring your round…</p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="flex flex-col gap-5 rounded-xl border border-neutral-200 p-6">
-      <div className="flex items-baseline gap-3">
-        <span className="text-5xl font-semibold tabular-nums">{debrief.score}</span>
-        <span className="text-sm text-neutral-500">/ 100</span>
-        {!debrief.batnaHeld && (
-          <span className="ml-auto rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
-            Reservation point crossed
-          </span>
-        )}
-      </div>
-
-      <p className="text-base">{debrief.verdict}</p>
-
-      <div className="flex flex-wrap gap-2">
-        {debrief.tags.map((tag, i) => {
-          const strong = tag.toLowerCase().startsWith("strong");
-          return (
-            <span
-              key={i}
-              className={
-                "rounded-full px-3 py-1 text-xs font-medium " +
-                (strong
-                  ? "bg-green-100 text-green-800"
-                  : "bg-amber-100 text-amber-800")
-              }
-            >
-              {tag}
-            </span>
-          );
-        })}
-      </div>
-
-      <div className="rounded-lg bg-neutral-50 p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
-          Turning point — turn {debrief.turningPoint.turn}
-        </p>
-        <p className="mt-1 text-sm">{debrief.turningPoint.what}</p>
-        <p className="mt-2 text-sm text-neutral-600">
-          <span className="font-medium text-neutral-900">A stronger move: </span>
-          {debrief.turningPoint.betterMove}
-        </p>
-      </div>
-
-      <details className="text-sm">
-        <summary className="cursor-pointer text-neutral-500">
-          Per-dimension breakdown
-        </summary>
-        <ul className="mt-2 space-y-2">
-          {debrief.dimensions.map((d, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="w-10 shrink-0 tabular-nums text-neutral-400">
-                {d.score}/5
-              </span>
-              <span>
-                <span className="font-medium">{d.name}.</span>
-                {d.comment ? (
-                  <span className="text-neutral-600"> {d.comment}</span>
-                ) : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </details>
-
-      <button
-        onClick={onGoAgain}
-        className="self-start rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white"
-      >
-        Go Again
-      </button>
-    </section>
   );
 }
 

@@ -1,9 +1,8 @@
 /**
- * scripts/text-harness.ts — run a negotiation round in the terminal (no voice).
+ * scripts/text-harness.mts — run a hot-seat round in the terminal (no voice).
  *
- * This de-risks the hard part: it lets us tune the adversary until it argues,
- * probes weaknesses, and does NOT fold to bare confidence — without spending
- * ElevenLabs voice minutes. Run with:  npm run harness
+ * De-risks the brain: lets us tune the Technician's interrogation + the debrief
+ * without spending ElevenLabs voice minutes. Run with:  npm run harness
  *
  * Commands during a round:
  *   /coach   score the round so far and print the debrief
@@ -15,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import type { ChatMessage } from "../lib/llm";
+import type { SessionSetup } from "../lib/setup";
 
 // --- minimal .env.local loader (Next.js loads it for the app; tsx does not) ---
 function loadEnv() {
@@ -33,28 +33,32 @@ if (!process.env.ANTHROPIC_API_KEY) {
 }
 
 const { CASE } = await import("../data/case");
-const { fetchGrounding } = await import("../data/grounding");
-const { adversarySystemPrompt } = await import("../prompts/adversary");
+const { DEFAULT_SETUP, buildHotSeatSystem } = await import("../lib/setup");
 const { streamAdversary } = await import("../lib/llm");
 const { scoreRound } = await import("../lib/coach");
 
-const grounding = await fetchGrounding();
+// Defend all the essential (non-trap) clauses by default in the harness.
+const setup: SessionSetup = {
+  ...DEFAULT_SETUP,
+  clauseIds: CASE.clauses.filter((c) => !c.isTrap).map((c) => c.id),
+};
+
 const messages: ChatMessage[] = [];
 let turnCount = 0;
 
 function stateSummary(): string {
-  if (turnCount === 0) return "The negotiation has not started yet.";
-  return `Turn ${turnCount}. The lawyer for ${CASE.userParty.name} has made ${turnCount} point(s) so far; keep what has been agreed or contested in mind from the exchange above.`;
+  if (turnCount === 0) return "The hot seat is just beginning.";
+  return `Turn ${turnCount}. Keep the junior's earlier answers and any concessions in mind.`;
 }
 
-async function adversaryTurn(): Promise<string> {
-  const system = adversarySystemPrompt(CASE, grounding, {
+async function technicianTurn(): Promise<string> {
+  const { rulebook, instructions } = await buildHotSeatSystem(setup, {
     turnCount,
     summary: stateSummary(),
   });
-  process.stdout.write("\nOPPOSING COUNSEL: ");
+  process.stdout.write("\nTHE TECHNICIAN: ");
   let text = "";
-  for await (const delta of streamAdversary(system, messages)) {
+  for await (const delta of streamAdversary(rulebook, instructions, messages)) {
     process.stdout.write(delta);
     text += delta;
   }
@@ -63,14 +67,13 @@ async function adversaryTurn(): Promise<string> {
 }
 
 async function main() {
-  console.log(`\n=== THE SPARRING ROOM (text harness) ===`);
+  console.log(`\n=== THE SPARRING ROOM — Hot Seat (text harness) ===`);
   console.log(`You act for ${CASE.userParty.name}. ${CASE.issue}\n`);
-  console.log(`Type your negotiation turns. /coach to score, /quit to exit.`);
+  console.log(`Answer the Technician. /coach to score, /quit to exit.`);
 
-  // The adversary opens with pressure (mirrors the voice agent's first message).
   const opener =
-    "Shall we start with the liability cap? My client won't accept your 12-month figure — given our GDPR exposure we need uncapped liability on data-protection breaches.";
-  console.log(`\nOPPOSING COUNSEL: ${opener}`);
+    "Before we start — what's your headline read on this DPA from a data-protection perspective? Biggest risk, what it means for the Trust commercially, and your recommended position. Sixty seconds.";
+  console.log(`\nTHE TECHNICIAN: ${opener}`);
   messages.push({ role: "assistant", content: opener });
 
   const rl = readline.createInterface({ input, output });
@@ -88,14 +91,14 @@ async function main() {
           text: m.content,
         })),
       };
-      const result = await scoreRound(transcript);
+      const result = await scoreRound(transcript, setup.caseId);
       console.log(JSON.stringify(result, null, 2));
       continue;
     }
 
     messages.push({ role: "user", content: line });
     turnCount += 1;
-    const reply = await adversaryTurn();
+    const reply = await technicianTurn();
     messages.push({ role: "assistant", content: reply });
   }
   rl.close();

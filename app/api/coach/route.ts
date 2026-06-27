@@ -10,13 +10,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { scoreRound } from "@/lib/coach";
+import type { SessionSetup } from "@/lib/setup";
 import type { Transcript } from "@/prompts/coach";
 
 export const runtime = "nodejs";
 export const maxDuration = 120; // coach uses Opus; give it room
 
 export async function POST(req: NextRequest) {
-  let body: { transcript?: Transcript };
+  let body: {
+    transcript?: Transcript;
+    caseId?: string;
+    setup?: Partial<SessionSetup>;
+  };
   try {
     body = await req.json();
   } catch {
@@ -32,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await scoreRound(transcript);
+    const result = await scoreRound(transcript, body.setup ?? body.caseId);
     return NextResponse.json(result);
   } catch (err) {
     console.error("coach error:", err);

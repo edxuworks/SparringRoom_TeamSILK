@@ -5,21 +5,23 @@
  * a plain-JSON convenience so the browser's typed-fallback mode (and quick tests
  * without a tunnel) can get an adversary reply in one call.
  *
- * Input:  { messages: { role: "user" | "assistant", content }[], turnCount?: number }
+ * Input:  { messages: {role,content}[], turnCount?, setup?: Partial<SessionSetup> }
  * Output: { reply: string }
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { generateAdversary, type ChatMessage } from "@/lib/llm";
-import { fetchGrounding } from "@/data/grounding";
-import { CASE } from "@/data/case";
-import { adversarySystemPrompt } from "@/prompts/adversary";
+import { buildHotSeatSystem, resolveSetup, type SessionSetup } from "@/lib/setup";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
-  let body: { messages?: ChatMessage[]; turnCount?: number };
+  let body: {
+    messages?: ChatMessage[];
+    turnCount?: number;
+    setup?: Partial<SessionSetup>;
+  };
   try {
     body = await req.json();
   } catch {
@@ -31,18 +33,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing messages" }, { status: 400 });
   }
 
-  const turnCount = body.turnCount ?? messages.filter((m) => m.role === "user").length;
-  const grounding = await fetchGrounding();
-  const system = adversarySystemPrompt(CASE, grounding, {
+  const turnCount =
+    body.turnCount ?? messages.filter((m) => m.role === "user").length;
+  const setup = resolveSetup(body.setup);
+
+  const { rulebook, instructions } = await buildHotSeatSystem(setup, {
     turnCount,
     summary:
       turnCount <= 0
-        ? "The negotiation is just beginning."
-        : `Turn ${turnCount}. Keep earlier proposals and concessions in mind from the exchange above.`,
+        ? "The hot seat is just beginning — open with the bottom-line question."
+        : `Turn ${turnCount}. Keep earlier answers and any concessions in mind from the exchange above.`,
   });
 
   try {
-    const reply = await generateAdversary(system, messages);
+    const reply = await generateAdversary(rulebook, instructions, messages);
     return NextResponse.json({ reply });
   } catch (err) {
     console.error("adversary error:", err);

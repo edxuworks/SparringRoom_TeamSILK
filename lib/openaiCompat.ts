@@ -22,7 +22,8 @@ export interface OpenAIChatRequest {
   messages: OpenAIMessage[];
   stream?: boolean;
   user_id?: string;
-  // elevenlabs_extra_body and other fields are ignored in v1.
+  /** Per-round selections forwarded from the client's customLlmExtraBody. */
+  elevenlabs_extra_body?: Partial<import("./setup").SessionSetup>;
   [key: string]: unknown;
 }
 

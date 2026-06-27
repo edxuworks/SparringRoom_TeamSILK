@@ -1,0 +1,31 @@
+:root {
+  --color-white: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f8fafc;
+  --color-surface-glass: rgba(255, 255, 255, 0.72);
+
+  --color-text-primary: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #7b8492;
+
+  --color-ink: #111827;
+  --color-ink-soft: #1f2937;
+  --color-ink-hover: #273244;
+
+  --color-gold: #c7a45a;
+  --color-gold-soft: #dcc68e;
+  --color-gold-muted: #b89955;
+
+  --color-sky-pale: #dcecf7;
+  --color-sky-soft: #edf7ff;
+
+  --color-border: #e5e7eb;
+  --color-border-strong: #d1d5db;
+  --color-stone-line: #cfd4dc;
+
+  --font-heading: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --font-body: "Inter", "Geist", "Helvetica Neue", Arial, sans-serif;
+
+  --shadow-card: 0 16px 40px rgba(17, 24, 39, 0.14);
+  --shadow-soft: 0 8px 24px rgba(17, 24, 39, 0.08);
+}

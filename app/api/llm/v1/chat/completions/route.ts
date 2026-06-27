@@ -16,9 +16,7 @@
 
 import { NextRequest } from "next/server";
 import { streamAdversary } from "@/lib/llm";
-import { fetchGrounding } from "@/data/grounding";
-import { CASE } from "@/data/case";
-import { adversarySystemPrompt } from "@/prompts/adversary";
+import { buildHotSeatSystem, resolveSetup } from "@/lib/setup";
 import { bumpTurn, getState, summarize } from "@/lib/gameState";
 import {
   type OpenAIChatRequest,
@@ -47,12 +45,15 @@ export async function POST(req: NextRequest) {
   const sessionId = body.user_id || "default";
   const chat = toChatMessages(body.messages || []);
 
+  // Per-round selections (case / persona / difficulty / clauses) arrive from the
+  // client via ElevenLabs customLlmExtraBody -> elevenlabs_extra_body.
+  const setup = resolveSetup(body.elevenlabs_extra_body);
+
   // Game-state: minimal v1. Bump only when the user actually spoke last.
   const userSpokeLast = chat[chat.length - 1]?.role === "user";
   const state = userSpokeLast ? bumpTurn(sessionId) : getState(sessionId);
 
-  const grounding = await fetchGrounding();
-  const system = adversarySystemPrompt(CASE, grounding, {
+  const { rulebook, instructions } = await buildHotSeatSystem(setup, {
     turnCount: state.turnCount,
     summary: summarize(state),
   });
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
       };
       try {
         safeEnqueue(sseRoleFrame(id, model));
-        for await (const delta of streamAdversary(system, chat)) {
+        for await (const delta of streamAdversary(rulebook, instructions, chat)) {
           if (closed) break;
           safeEnqueue(sseDeltaFrame(id, model, delta));
         }
