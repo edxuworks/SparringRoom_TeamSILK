@@ -1,0 +1,44 @@
+/**
+ * app/api/coach/route.ts — end-of-round scoring endpoint.
+ *
+ * Input:  { transcript: { turns: { role: "user" | "adversary", text }[] } }
+ * Output: CoachResult (see prompts/coach.ts) — score, batnaHeld, dimensions,
+ *         tags, turningPoint, verdict.
+ *
+ * Thin wrapper over lib/coach.ts#scoreRound (shared with the text harness).
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { scoreRound } from "@/lib/coach";
+import type { Transcript } from "@/prompts/coach";
+
+export const runtime = "nodejs";
+export const maxDuration = 120; // coach uses Opus; give it room
+
+export async function POST(req: NextRequest) {
+  let body: { transcript?: Transcript };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const transcript = body.transcript;
+  if (!transcript || !Array.isArray(transcript.turns) || transcript.turns.length === 0) {
+    return NextResponse.json(
+      { error: "Missing transcript.turns" },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const result = await scoreRound(transcript);
+    return NextResponse.json(result);
+  } catch (err) {
+    console.error("coach error:", err);
+    return NextResponse.json(
+      { error: "Scoring failed", detail: String(err) },
+      { status: 500 },
+    );
+  }
+}
