@@ -39,11 +39,24 @@ export function VoiceVisualizer({
 
     let phase = 0;
     let smoothed = 0;
+    // Read theme tokens so the line stays visible in both Cloud (light) and
+    // Local (dark) themes. Re-read occasionally so a theme flip is picked up.
+    const root = document.documentElement;
+    let youColor = "#111827";
+    let aiColor = "#c7a45a";
+    const refreshColors = () => {
+      const s = getComputedStyle(root);
+      youColor = s.getPropertyValue("--color-text-primary").trim() || youColor;
+      aiColor = s.getPropertyValue("--color-gold").trim() || aiColor;
+    };
+    refreshColors();
+    let frame = 0;
 
     const draw = () => {
       const w = canvas.width;
       const h = canvas.height;
       ctx.clearRect(0, 0, w, h);
+      if (frame++ % 30 === 0) refreshColors();
 
       const conv = convRef.current;
       let inV = 0;
@@ -65,7 +78,7 @@ export function VoiceVisualizer({
       const amp = (h / 2 - 6) * Math.min(1, smoothed * 3 + floor);
 
       ctx.lineWidth = 2.5;
-      ctx.strokeStyle = speaking ? "#c7a45a" : "#111827"; // gold=AI, ink=you
+      ctx.strokeStyle = speaking ? aiColor : youColor; // accent=AI, text=you
       ctx.beginPath();
       for (let x = 0; x <= w; x++) {
         const t = x / w;

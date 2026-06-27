@@ -9,6 +9,7 @@
  */
 
 import { useState } from "react";
+import type { EngineMode } from "@/lib/llm";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -21,7 +22,7 @@ const SEED: Msg = {
 const CANNED =
   "Got it — noted. That change will be applied automatically once document-driven generation is enabled (placeholder for now).";
 
-export function AmendChat() {
+export function AmendChat({ engineMode }: { engineMode: EngineMode }) {
   const [messages, setMessages] = useState<Msg[]>([SEED]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,6 +41,7 @@ export function AmendChat() {
         // Send only user/assistant turns (skip the seeded intro for cleanliness).
         body: JSON.stringify({
           messages: next.filter((m, i) => !(i === 0 && m === SEED)),
+          engineMode,
         }),
       });
       const reply = res.ok ? (await res.json()).reply || CANNED : CANNED;

@@ -13,7 +13,7 @@
  * PLACEHOLDER — lawyer-authored versions swap in behind the same seams.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ConversationProvider, useConversation } from "@elevenlabs/react";
 import type { CoachResult } from "@/prompts/coach";
 import { CASES, getCase } from "@/data/cases";
@@ -30,6 +30,7 @@ import { OpponentSelect } from "@/components/OpponentSelect";
 import { ContextClauses } from "@/components/ContextClauses";
 import { CallView } from "@/components/CallView";
 import { DebriefView } from "@/components/DebriefView";
+import { EngineToggle } from "@/components/EngineToggle";
 
 type Step =
   | "userType"
@@ -52,6 +53,7 @@ function SparringRoom() {
     personaId: DEFAULT_PERSONA_ID,
     difficultyId: DEFAULT_DIFFICULTY_ID,
     clauseIds: [],
+    engineMode: "cloud",
   });
 
   // --- round state ---
@@ -67,6 +69,14 @@ function SparringRoom() {
   const transcriptRef = useRef<Turn[]>([]);
 
   const caseData = getCase(setup.caseId);
+
+  // Local / Sovereign mode → dark theme. Toggle on <html> so the token overrides
+  // cascade across the whole document.
+  useEffect(() => {
+    const el = document.documentElement;
+    el.classList.toggle("engine-dark", setup.engineMode === "local");
+    return () => el.classList.remove("engine-dark");
+  }, [setup.engineMode]);
 
   const pushTurn = useCallback((t: Turn) => {
     transcriptRef.current = [...transcriptRef.current, t];
@@ -142,8 +152,9 @@ function SparringRoom() {
         body: JSON.stringify({ messages, setup }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "adversary failed");
-      const { reply } = await res.json();
-      pushTurn({ role: "adversary", text: reply });
+      const data = await res.json();
+      if (data.fellBack) setError("Local model unavailable — answered on Cloud.");
+      pushTurn({ role: "adversary", text: data.reply });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -177,7 +188,9 @@ function SparringRoom() {
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error || "coach failed");
-      setDebrief((await res.json()) as CoachResult);
+      const data = await res.json();
+      if (data.fellBack) setError("Local model unavailable — scored on Cloud.");
+      setDebrief(data as CoachResult);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -211,15 +224,20 @@ function SparringRoom() {
   const isLanding = step === "userType";
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-hidden bg-white text-[--color-text-primary]">
-      <GreekHallBackground faded={!isLanding} />
+    <main className="relative flex min-h-screen flex-col overflow-hidden bg-white text-[--color-text-primary] transition-colors duration-300">
+      <GreekHallBackground faded={!isLanding} dark={setup.engineMode === "local"} />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-3xl flex-1 flex-col px-6 py-10">
         {!isLanding && (
-          <header className="mb-6 flex items-center gap-3 border-b border-gold/30 pb-3">
+          <header className="mb-6 flex items-center justify-between gap-3 border-b border-gold/30 pb-3">
             <span className="font-heading text-xl font-semibold tracking-tight">
               The Sparring Room
             </span>
+            <EngineToggle
+              mode={setup.engineMode}
+              setMode={(m) => setSetup((s) => ({ ...s, engineMode: m }))}
+              disabled={started}
+            />
           </header>
         )}
 
@@ -252,6 +270,7 @@ function SparringRoom() {
       {step === "adminDone" && (
         <AdminDone
           filename={uploadedName}
+          engineMode={setup.engineMode}
           onTest={() => {
             resetRound();
             setStep("caseSelect");

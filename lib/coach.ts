@@ -10,7 +10,7 @@
  */
 
 import { z } from "zod";
-import { anthropic, modelFor } from "./llm";
+import { generateBrain, type BrainId } from "./llm";
 import { RULEBOOK } from "./skill";
 import { getCase } from "../data/cases";
 import {
@@ -48,6 +48,7 @@ const CoachSchema = z.object({
 export async function scoreRound(
   transcript: Transcript,
   setupOrCaseId?: Partial<SessionSetup> | string,
+  brain: BrainId = "claude",
 ): Promise<CoachResult> {
   const setup = resolveSetup(
     typeof setupOrCaseId === "string"
@@ -61,15 +62,12 @@ export async function scoreRound(
   const instructions = coachInstructions(caseData, transcript, chosenClauses);
 
   async function attempt(nudge = ""): Promise<CoachResult | null> {
-    const response = await anthropic.messages.create({
-      model: modelFor("coach"),
-      max_tokens: 2000,
-      thinking: { type: "disabled" },
-      output_config: { effort: "low" },
-      system: [
-        { type: "text", text: RULEBOOK, cache_control: { type: "ephemeral" } },
-        { type: "text", text: instructions },
-      ],
+    const text = await generateBrain({
+      brain,
+      role: "coach",
+      rulebook: RULEBOOK,
+      instructions,
+      maxTokens: 2000,
       messages: [
         {
           role: "user",
@@ -79,11 +77,6 @@ export async function scoreRound(
         },
       ],
     });
-
-    const text = response.content
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("")
-      .trim();
 
     // Be defensive: strip stray code fences / extract the JSON object.
     const cleaned = text.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();

@@ -15,7 +15,7 @@
  */
 
 import { NextRequest } from "next/server";
-import { streamAdversary } from "@/lib/llm";
+import { streamAdversary, brainFromMode } from "@/lib/llm";
 import { buildHotSeatSystem, resolveSetup } from "@/lib/setup";
 import { bumpTurn, getState, summarize } from "@/lib/gameState";
 import {
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     turnCount: state.turnCount,
     summary: summarize(state),
   });
+  const brain = brainFromMode(setup.engineMode);
 
   const id = newCompletionId();
 
@@ -74,7 +75,7 @@ export async function POST(req: NextRequest) {
       };
       try {
         safeEnqueue(sseRoleFrame(id, model));
-        for await (const delta of streamAdversary(rulebook, instructions, chat)) {
+        for await (const delta of streamAdversary(rulebook, instructions, chat, brain)) {
           if (closed) break;
           safeEnqueue(sseDeltaFrame(id, model, delta));
         }

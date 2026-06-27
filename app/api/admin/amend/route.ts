@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { anthropic, modelFor, type ChatMessage } from "@/lib/llm";
+import { generateBrain, brainFromMode, type ChatMessage } from "@/lib/llm";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -23,7 +23,7 @@ const SYSTEM = `You are a friendly setup assistant helping a senior lawyer confi
 - One or two sentences. No lists.`;
 
 export async function POST(req: NextRequest) {
-  let body: { messages?: ChatMessage[] };
+  let body: { messages?: ChatMessage[]; engineMode?: string };
   try {
     body = await req.json();
   } catch {
@@ -35,21 +35,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing messages" }, { status: 400 });
   }
 
+  // Honor the session's Cloud/Local posture (the firm's playbook is sensitive).
+  const brain = brainFromMode(body.engineMode);
+  const args = {
+    role: "amend" as const,
+    instructions: SYSTEM,
+    messages,
+    maxTokens: 200,
+  };
   try {
-    const res = await anthropic.messages.create({
-      model: modelFor("adversary"), // fast model; this is a lightweight chat
-      max_tokens: 200,
-      thinking: { type: "disabled" },
-      output_config: { effort: "low" },
-      system: SYSTEM,
-      messages,
-    });
-    const reply = res.content
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("")
-      .trim();
+    const reply = await generateBrain({ brain, ...args });
     return NextResponse.json({ reply });
   } catch (err) {
+    if (brain === "nemotron") {
+      try {
+        const reply = await generateBrain({ brain: "claude", ...args });
+        return NextResponse.json({ reply, fellBack: true });
+      } catch {
+        /* fall through */
+      }
+    }
     console.error("admin amend error:", err);
     return NextResponse.json(
       { error: "Amend assistant failed", detail: String(err) },

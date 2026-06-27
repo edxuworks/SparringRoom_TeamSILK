@@ -10,11 +10,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { scoreRound } from "@/lib/coach";
-import type { SessionSetup } from "@/lib/setup";
+import { brainFromMode } from "@/lib/llm";
+import { resolveSetup, type SessionSetup } from "@/lib/setup";
 import type { Transcript } from "@/prompts/coach";
 
 export const runtime = "nodejs";
-export const maxDuration = 120; // coach uses Opus; give it room
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   let body: {
@@ -36,10 +37,23 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const setup = resolveSetup(
+    typeof body.setup === "object" ? body.setup : { caseId: body.caseId },
+  );
+  const brain = brainFromMode(setup.engineMode);
   try {
-    const result = await scoreRound(transcript, body.setup ?? body.caseId);
+    const result = await scoreRound(transcript, setup, brain);
     return NextResponse.json(result);
   } catch (err) {
+    // Local (Nemotron) unavailable → fall back to Cloud (Claude).
+    if (brain === "nemotron") {
+      try {
+        const result = await scoreRound(transcript, setup, "claude");
+        return NextResponse.json({ ...result, fellBack: true });
+      } catch {
+        /* fall through */
+      }
+    }
     console.error("coach error:", err);
     return NextResponse.json(
       { error: "Scoring failed", detail: String(err) },

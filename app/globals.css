@@ -56,7 +56,8 @@
   --color-text-secondary: var(--color-text-secondary);
   --color-text-muted: var(--color-text-muted);
 
-  --font-heading: var(--font-heading), "Georgia", serif;
+  /* Legora match: editorial serif headings (Playfair ≈ their Domaine Display). */
+  --font-heading: var(--font-heading), "Playfair Display", Georgia, serif;
   --font-body: var(--font-body), "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -64,4 +65,37 @@ body {
   background: var(--color-white);
   color: var(--color-text-primary);
   font-family: var(--font-body), "Helvetica Neue", Arial, sans-serif;
+}
+
+/*
+ * Local / Sovereign mode = dark theme. Toggled on <html> so the token overrides
+ * cascade everywhere. Black background (the Greek hall shows as subtle grey + a
+ * green-neon glow via GreekHallBackground), light text, green-neon accents.
+ * Exact same layout — only colours change.
+ */
+.engine-dark {
+  --color-surface: #0c1410;
+  --color-surface-soft: #122019;
+  --color-text-primary: #e9f4ec;
+  --color-text-secondary: #9db3a6;
+  --color-text-muted: #708778;
+  --color-border: #2a3a32;
+  --color-border-strong: #3a5247;
+  --color-stone-line: #3a5247;
+  /* primary buttons → readable green so they're clearly visible on black */
+  --color-ink: #166534;
+  --color-ink-soft: #15803d;
+  --color-ink-hover: #15803d;
+  --color-gold: #4ade80; /* accent → subtle green neon */
+  --color-gold-soft: #86efac;
+  --color-gold-muted: #34d399;
+  background-color: #070d0a;
+  color: var(--color-text-primary);
+}
+.engine-dark body {
+  background-color: #070d0a;
+}
+/* Hardcoded white surfaces (cards) follow the dark surface token. */
+.engine-dark .bg-white {
+  background-color: var(--color-surface) !important;
 }

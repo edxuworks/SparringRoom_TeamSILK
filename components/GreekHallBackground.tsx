@@ -1,13 +1,29 @@
 /**
- * components/GreekHallBackground.tsx — the white classical-hall backdrop.
+ * components/GreekHallBackground.tsx — the classical-hall backdrop.
  *
- * The marble hall (ref_02) should be clearly visible but never compete with
- * text (see ref_01: arches/columns/sky show through behind the cards). On the
- * landing it sits fairly present; `faded` pushes it back behind content-dense
- * screens. Tune the opacity / overlay numbers below to taste.
+ * Cloud (light): subtle white marble hall photo + sky glow.
+ * Local (dark):  PURE BLACK with the hall drawn as neon-green LINE ART
+ *                (columns + arches blueprint) — a "sovereign / secure terminal"
+ *                feel. Texture only — never competes with text.
  */
 
-export function GreekHallBackground({ faded = false }: { faded?: boolean }) {
+export function GreekHallBackground({
+  faded = false,
+  dark = false,
+}: {
+  faded?: boolean;
+  dark?: boolean;
+}) {
+  if (dark) {
+    // Local / Sovereign mode: plain black background.
+    return (
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-black"
+      />
+    );
+  }
+
   return (
     <div
       aria-hidden="true"
@@ -23,11 +39,8 @@ export function GreekHallBackground({ faded = false }: { faded?: boolean }) {
           filter: "saturate(0.8) contrast(0.95)",
         }}
       />
-      {/* Light wash to keep text crisp — much lighter than before so the hall shows */}
       <div className={"absolute inset-0 " + (faded ? "bg-white/60" : "bg-white/30")} />
-      {/* Pale sky glow through the central arch */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(220,236,247,0.55),transparent_38%)]" />
-      {/* Soft bottom fade so footers/controls stay clean */}
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-white to-transparent" />
     </div>
   );

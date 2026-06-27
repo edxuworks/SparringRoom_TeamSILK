@@ -16,6 +16,7 @@ import { getCase, DEFAULT_CASE_ID } from "../data/cases";
 import { getPersona, DEFAULT_PERSONA_ID } from "../data/personas";
 import { getDifficulty, DEFAULT_DIFFICULTY_ID } from "../data/difficulties";
 import { RULEBOOK } from "./skill";
+import type { EngineMode } from "./llm";
 import { hotSeatInstructions, type GameStateSummary } from "../prompts/hotseat";
 
 export interface SessionSetup {
@@ -23,6 +24,8 @@ export interface SessionSetup {
   personaId: string;
   difficultyId: string;
   clauseIds: string[];
+  /** Cloud (Claude, default) vs Local (Nemotron / sovereign). */
+  engineMode: EngineMode;
 }
 
 export const DEFAULT_SETUP: SessionSetup = {
@@ -30,6 +33,7 @@ export const DEFAULT_SETUP: SessionSetup = {
   personaId: DEFAULT_PERSONA_ID,
   difficultyId: DEFAULT_DIFFICULTY_ID,
   clauseIds: [],
+  engineMode: "cloud",
 };
 
 /** Merge partial selections (from the client) over the defaults. */
@@ -39,6 +43,7 @@ export function resolveSetup(partial?: Partial<SessionSetup>): SessionSetup {
     personaId: partial?.personaId || DEFAULT_SETUP.personaId,
     difficultyId: partial?.difficultyId || DEFAULT_SETUP.difficultyId,
     clauseIds: partial?.clauseIds ?? DEFAULT_SETUP.clauseIds,
+    engineMode: partial?.engineMode || DEFAULT_SETUP.engineMode,
   };
 }
 

@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { generateAdversary, type ChatMessage } from "@/lib/llm";
+import { generateAdversary, brainFromMode, type ChatMessage } from "@/lib/llm";
 import { buildHotSeatSystem, resolveSetup, type SessionSetup } from "@/lib/setup";
 
 export const runtime = "nodejs";
@@ -45,10 +45,20 @@ export async function POST(req: NextRequest) {
         : `Turn ${turnCount}. Keep earlier answers and any concessions in mind from the exchange above.`,
   });
 
+  const brain = brainFromMode(setup.engineMode);
   try {
-    const reply = await generateAdversary(rulebook, instructions, messages);
+    const reply = await generateAdversary(rulebook, instructions, messages, brain);
     return NextResponse.json({ reply });
   } catch (err) {
+    // Local (Nemotron) unavailable → fall back to Cloud (Claude) gracefully.
+    if (brain === "nemotron") {
+      try {
+        const reply = await generateAdversary(rulebook, instructions, messages, "claude");
+        return NextResponse.json({ reply, fellBack: true });
+      } catch {
+        /* fall through to error */
+      }
+    }
     console.error("adversary error:", err);
     return NextResponse.json(
       { error: "Adversary failed", detail: String(err) },

@@ -1,20 +1,24 @@
 /**
- * lib/llm.ts — role-keyed provider gateway.
+ * lib/llm.ts — the reasoning-brain gateway (Cloud ↔ Local).
  *
- * Provider is chosen PER ROLE, not globally, because swappability != suitability:
- *   - adversary -> Claude Sonnet (fast, low-latency for the live voice call)
- *                  [SWAP -> NVIDIA Nemotron for on-prem "Sovereign Mode"]
- *   - coach     -> Claude Opus  (quality matters, latency doesn't)
- *                  [SWAP -> NVIDIA Nemotron as an independent, different-family judge]
- *   - research  -> Perplexity Sonar (live web-grounded facts) — NOT used in v1.
+ * Two brains behind one interface:
+ *   - "claude"   (Cloud)  — Anthropic, prompt-cached, fast. Default.
+ *   - "nemotron" (Local)  — NVIDIA Nemotron via OpenRouter (OpenAI-compatible).
+ *                           Sovereign-mode story; slower, no prompt cache.
+ *                           (Hackathon: OpenRouter; prod: on-prem local GPU.)
  *
- * v1 is Claude-only. The role->model map is env-overridable (MODEL_ADVERSARY,
- * MODEL_COACH). The Nemotron/Perplexity branches are deliberate seams for later.
+ * The "Cloud/Local" UI toggle maps to these via brainFromMode(). The Claude path
+ * keeps cache_control + thinking/effort; the Nemotron path sends a plain system
+ * message and strips <think> reasoning. Voice stays on Qwen (ElevenLabs) and is
+ * unaffected unless the shim is used.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 
-export type Role = "adversary" | "coach" | "research";
+export type Role = "adversary" | "coach" | "amend";
+export type BrainId = "claude" | "nemotron";
+export type EngineMode = "cloud" | "local";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -22,44 +26,99 @@ export const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-/** Resolve the model id for a role (env-overridable). */
-export function modelFor(role: Role): string {
-  switch (role) {
-    case "adversary":
-      return process.env.MODEL_ADVERSARY || "claude-sonnet-4-6";
-    case "coach":
-      return process.env.MODEL_COACH || "claude-opus-4-8";
-    case "research":
-      // SWAP point: Perplexity Sonar. Unused in v1.
-      throw new Error("research role is not wired in v1");
-  }
+/** Error thrown when Local is requested but OpenRouter isn't configured. */
+export const LOCAL_NO_KEY = "LOCAL_MODE_NO_KEY";
+
+/** Lazily build the OpenRouter client (so a missing key doesn't crash Cloud). */
+function openrouterClient(): OpenAI {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error(LOCAL_NO_KEY);
+  // Bound slow/failing Local calls (esp. the free tier) so we fall back to Cloud
+  // promptly instead of hanging. Raise once on paid credits for big coach JSON.
+  return new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey,
+    timeout: 45_000,
+    maxRetries: 0,
+  });
 }
 
+/** "cloud" → claude, "local" → nemotron (default claude). */
+export function brainFromMode(mode?: string | null): BrainId {
+  return mode === "local" ? "nemotron" : "claude";
+}
+
+/** Resolve the model id for a brain + role (env-overridable). */
+export function modelFor(brain: BrainId, role: Role): string {
+  if (brain === "nemotron") {
+    return process.env.MODEL_NEMOTRON || "nvidia/nemotron-3-super-120b-a12b";
+  }
+  if (role === "coach") return process.env.MODEL_COACH || "claude-sonnet-4-6";
+  return process.env.MODEL_ADVERSARY || "claude-sonnet-4-6"; // adversary + amend
+}
+
+/** Strip Nemotron-style chain-of-thought so it never reaches the user/JSON. */
+function stripReasoning(text: string): string {
+  let t = text.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  // stray unterminated reasoning: drop everything up to a lone </think>
+  const close = t.lastIndexOf("</think>");
+  if (close !== -1) t = t.slice(close + "</think>".length);
+  return t.trim();
+}
+
+type BrainArgs = {
+  brain?: BrainId;
+  role?: Role;
+  /** Large static prefix — cached on the Claude path. Optional. */
+  rulebook?: string;
+  instructions: string;
+  messages: ChatMessage[];
+  maxTokens?: number;
+};
+
 /**
- * Stream the Technician's next spoken turn as text deltas.
- *
- * `rulebook` is the large STATIC skill+checklist+playbook prefix — sent as a
- * cached system block (`cache_control: ephemeral`) so repeated turns are fast
- * and cheap. `instructions` is the small volatile per-round block. Tuned for
- * time-to-first-token: thinking disabled, low effort, short cap.
+ * Stream a brain's reply as text deltas. The Claude path streams natively with a
+ * cached rulebook prefix; the Nemotron path resolves the full reply then yields
+ * it once (with reasoning stripped) — fine since Local is used for typed + coach,
+ * and voice runs on Qwen.
  */
-export async function* streamAdversary(
-  rulebook: string,
-  instructions: string,
-  messages: ChatMessage[],
-): AsyncGenerator<string> {
+export async function* streamBrain({
+  brain = "claude",
+  role = "adversary",
+  rulebook,
+  instructions,
+  messages,
+  maxTokens = 500,
+}: BrainArgs): AsyncGenerator<string> {
+  const model = modelFor(brain, role);
+
+  if (brain === "nemotron") {
+    const client = openrouterClient();
+    const system = [rulebook, instructions].filter(Boolean).join("\n\n");
+    const res = await client.chat.completions.create({
+      model,
+      max_tokens: maxTokens,
+      messages: [{ role: "system", content: system }, ...messages],
+    });
+    yield stripReasoning(res.choices[0]?.message?.content ?? "");
+    return;
+  }
+
+  const system = rulebook
+    ? [
+        { type: "text" as const, text: rulebook, cache_control: { type: "ephemeral" as const } },
+        { type: "text" as const, text: instructions },
+      ]
+    : instructions;
+
   const stream = anthropic.messages.stream({
-    model: modelFor("adversary"),
-    max_tokens: 500,
+    model,
+    max_tokens: maxTokens,
     thinking: { type: "disabled" },
     output_config: { effort: "low" },
-    system: [
-      { type: "text", text: rulebook, cache_control: { type: "ephemeral" } },
-      { type: "text", text: instructions },
-    ],
+    system,
     messages,
   });
-
   for await (const event of stream) {
     if (
       event.type === "content_block_delta" &&
@@ -70,14 +129,29 @@ export async function* streamAdversary(
   }
 }
 
-/** Non-streaming convenience: collect the Technician's full turn as a string. */
+/** Collect a brain's full reply as a string. */
+export async function generateBrain(args: BrainArgs): Promise<string> {
+  let out = "";
+  for await (const delta of streamBrain(args)) out += delta;
+  return out.trim();
+}
+
+// --- Adversary (Technician) convenience wrappers, now brain-aware ---
+
+export function streamAdversary(
+  rulebook: string,
+  instructions: string,
+  messages: ChatMessage[],
+  brain: BrainId = "claude",
+): AsyncGenerator<string> {
+  return streamBrain({ brain, role: "adversary", rulebook, instructions, messages });
+}
+
 export async function generateAdversary(
   rulebook: string,
   instructions: string,
   messages: ChatMessage[],
+  brain: BrainId = "claude",
 ): Promise<string> {
-  let out = "";
-  for await (const delta of streamAdversary(rulebook, instructions, messages))
-    out += delta;
-  return out.trim();
+  return generateBrain({ brain, role: "adversary", rulebook, instructions, messages });
 }

@@ -8,16 +8,19 @@
  * side; the chat (AmendChat) acknowledges tweaks without mutating anything yet.
  */
 
+import type { EngineMode } from "@/lib/llm";
 import { CASES } from "@/data/cases";
 import { PERSONAS } from "@/data/personas";
 import { AmendChat } from "./AmendChat";
 
 export function AdminDone({
   filename,
+  engineMode,
   onTest,
   onReupload,
 }: {
   filename: string | null;
+  engineMode: EngineMode;
   onTest: () => void;
   onReupload: () => void;
 }) {
@@ -82,7 +85,7 @@ export function AdminDone({
         </button>
       </div>
 
-      <AmendChat />
+      <AmendChat engineMode={engineMode} />
 
       <p className="text-xs text-[--color-text-muted]">
         Changes requested in chat are acknowledged but not yet applied — automatic
