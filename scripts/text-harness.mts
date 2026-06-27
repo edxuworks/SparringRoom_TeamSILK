@@ -72,7 +72,7 @@ async function main() {
   console.log(`Answer the Technician. /coach to score, /quit to exit.`);
 
   const opener =
-    "Before we start — what's your headline read on this DPA from a data-protection perspective? Biggest risk, what it means for the Trust commercially, and your recommended position. Sixty seconds.";
+    "Before we start, what's your headline read on this DPA from a data-protection perspective? Biggest risk, what it means for the Trust commercially, and your recommended position. Sixty seconds.";
   console.log(`\nTHE TECHNICIAN: ${opener}`);
   messages.push({ role: "assistant", content: opener });
 

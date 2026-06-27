@@ -43,7 +43,7 @@ type Step =
   | "report";
 
 const TEXT_OPENER =
-  "Before we start — what's your headline read on this DPA from a data-protection perspective? Biggest risk, what it means for the Trust commercially, and your recommended position. Sixty seconds.";
+  "Before we start, what's your headline read on this DPA from a data-protection perspective? Biggest risk, what it means for the Trust commercially, and your recommended position. Sixty seconds.";
 
 function SparringRoom() {
   const [step, setStep] = useState<Step>("userType");
