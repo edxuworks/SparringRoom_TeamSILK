@@ -3,8 +3,8 @@
 *Hack the Law 2026 · Legora "Sparring Room" challenge · adaeze njiaju, divine sanusi, edward xu (Team SILK)*
 
 A voice-first training ground where a lawyer practises real legal work against an AI
-that fights back — opposing counsel that argues, probes weak points, and doesn't fold
-to bare confidence — then turns coach and delivers a specific, scored debrief after
+that fights back, opposing counsel that argues, probes weak points, and doesn't fold
+to bare confidence, then turns coach and delivers a specific, scored debrief after
 every round. Not an assistant. A sparring partner.
 
 ## Why
