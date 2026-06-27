@@ -81,9 +81,14 @@ TRANSCRIPT
 ${transcriptText}
 
 OUTPUT
-Return ONLY a single raw JSON object — no prose, no markdown, no code fences — in
-exactly this shape. Be terse (this renders on a card): each field one or two
-sentences.
+Return a single JSON object in exactly this shape. This renders on a card, so be
+TERSE and stay within budget:
+- Every list: at most 3 items — the most important only. Empty ([]) if none.
+- Every string value: ONE short sentence, max ~25 words. No sub-clauses, no
+  citations longer than the article number. The headline and each consequence:
+  one sentence each.
+- Each "gaps" entry: keep issue/legal/commercial/correct to one short phrase each.
+Quality over quantity — a tight, high-signal debrief beats an exhaustive one.
 {
   "headline": "<one sentence, legal + commercial>",
   "score": <0-100 integer>,

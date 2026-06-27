@@ -38,7 +38,7 @@ function openrouterClient(): OpenAI {
   return new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
     apiKey,
-    timeout: 45_000,
+    timeout: 20_000,
     maxRetries: 0,
   });
 }
@@ -76,6 +76,11 @@ type BrainArgs = {
   maxTokens?: number;
 };
 
+type StructuredArgs = BrainArgs & {
+  /** JSON schema the reply MUST satisfy (constrained decoding / structured output). */
+  jsonSchema: Record<string, unknown>;
+};
+
 /**
  * Stream a brain's reply as text deltas. The Claude path streams natively with a
  * cached rulebook prefix; the Nemotron path resolves the full reply then yields
@@ -106,7 +111,7 @@ export async function* streamBrain({
 
   const system = rulebook
     ? [
-        { type: "text" as const, text: rulebook, cache_control: { type: "ephemeral" as const } },
+        { type: "text" as const, text: rulebook, cache_control: { type: "ephemeral" as const, ttl: "1h" as const } },
         { type: "text" as const, text: instructions },
       ]
     : instructions;
@@ -134,6 +139,65 @@ export async function generateBrain(args: BrainArgs): Promise<string> {
   let out = "";
   for await (const delta of streamBrain(args)) out += delta;
   return out.trim();
+}
+
+/**
+ * Generate a reply CONSTRAINED to a JSON schema, returned as a raw JSON string.
+ *
+ * Non-streaming (the structured payloads are small, well under the streaming
+ * threshold) and single-pass: the Claude path uses Anthropic structured outputs
+ * (`output_config.format`) so the reply is guaranteed schema-valid — no
+ * parse-then-retry latency tax. The Nemotron path asks OpenRouter for a
+ * json_schema response_format and strips any stray reasoning as a safety net.
+ * Caller still validates (zod) but never needs a second model round-trip.
+ */
+export async function generateStructured({
+  brain = "claude",
+  role = "coach",
+  rulebook,
+  instructions,
+  messages,
+  maxTokens = 1200,
+  jsonSchema,
+}: StructuredArgs): Promise<string> {
+  const model = modelFor(brain, role);
+
+  if (brain === "nemotron") {
+    const client = openrouterClient();
+    const system = [rulebook, instructions].filter(Boolean).join("\n\n");
+    const res = await client.chat.completions.create({
+      model,
+      max_tokens: maxTokens,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "debrief", strict: true, schema: jsonSchema },
+      },
+      messages: [{ role: "system", content: system }, ...messages],
+    });
+    return stripReasoning(res.choices[0]?.message?.content ?? "");
+  }
+
+  const system = rulebook
+    ? [
+        { type: "text" as const, text: rulebook, cache_control: { type: "ephemeral" as const, ttl: "1h" as const } },
+        { type: "text" as const, text: instructions },
+      ]
+    : instructions;
+
+  const res = await anthropic.messages.create({
+    model,
+    max_tokens: maxTokens,
+    thinking: { type: "disabled" },
+    output_config: { effort: "low", format: { type: "json_schema", schema: jsonSchema } },
+    system,
+    messages,
+  });
+
+  return res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("")
+    .trim();
 }
 
 // --- Adversary (Technician) convenience wrappers, now brain-aware ---

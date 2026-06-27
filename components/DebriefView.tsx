@@ -20,13 +20,49 @@ function scoreColor(s: number): string {
 export function DebriefView({
   debrief,
   scoring,
+  error,
+  onRetry,
   onGoAgain,
 }: {
   debrief: CoachResult | null;
   scoring: boolean;
+  error?: string | null;
+  onRetry?: () => void;
   onGoAgain: () => void;
 }) {
-  if (scoring || !debrief) {
+  if (scoring) {
+    return (
+      <section className="flex min-h-[280px] items-center justify-center rounded-2xl border border-[--color-border] bg-white shadow-[var(--shadow-soft)]">
+        <p className="text-sm text-[--color-text-secondary]">Scoring your hot seat…</p>
+      </section>
+    );
+  }
+
+  if (error && !debrief) {
+    return (
+      <section className="flex min-h-[280px] flex-col items-center justify-center gap-4 rounded-2xl border border-[--color-border] bg-white p-6 text-center shadow-[var(--shadow-soft)]">
+        <p className="text-sm text-red-700">{error}</p>
+        <div className="flex gap-3">
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              className="rounded-lg bg-ink px-5 py-2 text-sm font-medium text-white transition hover:bg-ink-hover"
+            >
+              Try again
+            </button>
+          )}
+          <button
+            onClick={onGoAgain}
+            className="rounded-lg border border-[--color-border] px-5 py-2 text-sm font-medium transition hover:bg-[--color-surface-soft]"
+          >
+            Go Again
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (!debrief) {
     return (
       <section className="flex min-h-[280px] items-center justify-center rounded-2xl border border-[--color-border] bg-white shadow-[var(--shadow-soft)]">
         <p className="text-sm text-[--color-text-secondary]">Scoring your hot seat…</p>

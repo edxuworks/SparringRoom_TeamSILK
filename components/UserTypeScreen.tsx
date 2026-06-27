@@ -19,7 +19,10 @@ export function UserTypeScreen({
     <section className="flex w-full flex-col items-center">
       <div className="mb-9 text-center">
         <Landmark className="mx-auto mb-4 h-7 w-7 text-gold" strokeWidth={1.5} />
-        <h1 className="font-heading text-5xl font-medium tracking-[-0.02em] text-[--color-text-primary] md:text-6xl">
+        <h1
+          className="text-5xl font-bold tracking-[-0.02em] text-[--color-text-primary] md:text-6xl"
+          style={{ fontFamily: 'Calibri, Carlito, "Segoe UI", system-ui, sans-serif' }}
+        >
           The Sparring Room
         </h1>
         <div className="mx-auto mt-4 h-px w-16 bg-gold/60" />

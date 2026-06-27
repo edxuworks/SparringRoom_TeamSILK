@@ -62,6 +62,7 @@ function SparringRoom() {
   const [debrief, setDebrief] = useState<CoachResult | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [scoring, setScoring] = useState(false);
+  const [coachError, setCoachError] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
   const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -162,6 +163,45 @@ function SparringRoom() {
     }
   }, [textInput, thinking, pushTurn, setup]);
 
+  // --- scoring (shared by end-of-round and the debrief "Try again" button) ---
+  const runScoring = useCallback(async () => {
+    if (transcriptRef.current.length === 0) {
+      setError("Nothing to score yet.");
+      return;
+    }
+    setCoachError(null);
+    setScoring(true);
+    // Fail fast: never let the spinner hang on a slow/stuck request.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const res = await fetch("/api/coach", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: { turns: transcriptRef.current },
+          setup,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "coach failed");
+      const data = await res.json();
+      if (data.fellBack) setError("Local model unavailable — scored on Cloud.");
+      setDebrief(data as CoachResult);
+    } catch (e) {
+      setCoachError(
+        controller.signal.aborted
+          ? "Scoring timed out. Try again."
+          : e instanceof Error
+            ? e.message
+            : String(e),
+      );
+    } finally {
+      clearTimeout(timer);
+      setScoring(false);
+    }
+  }, [setup]);
+
   // --- end round -> coach -> report ---
   const endRound = useCallback(async () => {
     if (mode === "voice") {
@@ -176,33 +216,16 @@ function SparringRoom() {
       setError("Nothing to score yet.");
       return;
     }
-    setScoring(true);
     setStep("report");
-    try {
-      const res = await fetch("/api/coach", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          transcript: { turns: transcriptRef.current },
-          setup,
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || "coach failed");
-      const data = await res.json();
-      if (data.fellBack) setError("Local model unavailable — scored on Cloud.");
-      setDebrief(data as CoachResult);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setScoring(false);
-    }
-  }, [mode, conversation, setup]);
+    void runScoring();
+  }, [mode, conversation, runScoring]);
 
   const resetRound = useCallback(() => {
     transcriptRef.current = [];
     setTranscript([]);
     setDebrief(null);
     setError(null);
+    setCoachError(null);
     setStarted(false);
     setTextInput("");
   }, []);
@@ -354,7 +377,13 @@ function SparringRoom() {
       )}
 
       {step === "report" && (
-        <DebriefView debrief={debrief} scoring={scoring} onGoAgain={goAgain} />
+        <DebriefView
+          debrief={debrief}
+          scoring={scoring}
+          error={coachError}
+          onRetry={runScoring}
+          onGoAgain={goAgain}
+        />
       )}
           </div>
         )}

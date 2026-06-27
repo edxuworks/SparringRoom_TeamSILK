@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Sparring Room — Team SILK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* ─── Tokens lifted from app/globals.css ─────────────────────────── */
+  :root{
+    --white:#ffffff; --surface:#ffffff; --surface-soft:#f8fafc;
+    --ink:#111827; --ink-soft:#1f2937;
+    --text:#111827; --text-2:#4b5563; --text-muted:#7b8492;
+    --gold:#c7a45a; --gold-soft:#dcc68e; --gold-muted:#b89955;
+    --sky:#dcecf7; --sky-soft:#edf7ff;
+    --border:#e5e7eb; --border-strong:#d1d5db; --stone:#cfd4dc;
+    --shadow-card:0 16px 40px rgba(17,24,39,.14);
+    --shadow-soft:0 8px 24px rgba(17,24,39,.08);
+    --serif:"Playfair Display",Georgia,"Times New Roman",serif;
+    --sans:"Helvetica Neue",Arial,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--sans); color:var(--text); background:#0b0e14;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+
+  /* ─── Deck shell ─────────────────────────────────────────────────── */
+  .deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  .slide{
+    position:absolute;inset:0;display:none;flex-direction:column;
+    padding:5.2vh 6.2vw 8vh; background:var(--white);
+    opacity:0; transition:opacity .35s ease;
+    overflow:hidden;
+  }
+  .slide.active{display:flex;opacity:1}
+  .slide.dark{background:#070d0a;color:#e9f4ec}
+  .slide.dark .eyebrow{color:#4ade80}
+  .slide.dark .kicker-rule{background:#4ade80}
+
+  /* eyebrow + headings */
+  .eyebrow{
+    font-size:.78rem;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--gold-muted);font-weight:700;margin-bottom:1.1rem;
+    display:flex;align-items:center;gap:.8rem;
+  }
+  .kicker-rule{width:34px;height:2px;background:var(--gold);display:inline-block}
+  h1{font-family:var(--serif);font-weight:800;font-size:clamp(2.4rem,5.4vw,4.4rem);line-height:1.02;letter-spacing:-.01em}
+  h2{font-family:var(--serif);font-weight:700;font-size:clamp(1.9rem,3.6vw,3rem);line-height:1.06;letter-spacing:-.01em}
+  h3{font-family:var(--serif);font-weight:700;font-size:1.32rem;line-height:1.2}
+  p.lead{font-size:clamp(1.05rem,1.55vw,1.4rem);color:var(--text-2);line-height:1.5;max-width:54ch}
+  .muted{color:var(--text-muted)}
+  .gold{color:var(--gold-muted)}
+  strong{color:var(--ink);font-weight:700}
+  .slide.dark strong{color:#e9f4ec}
+
+  /* layout helpers */
+  .grow{flex:1;display:flex;flex-direction:column;justify-content:center}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:2.6rem;align-items:center}
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem}
+  .four{display:grid;grid-template-columns:repeat(4,1fr);gap:1.1rem}
+  .row{display:flex;gap:1rem;flex-wrap:wrap}
+
+  /* cards */
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:16px;
+    padding:1.5rem 1.5rem;box-shadow:var(--shadow-soft);
+  }
+  .slide.dark .card{background:#0c1410;border-color:#2a3a32}
+  .card h3{margin-bottom:.5rem}
+  .card p{color:var(--text-2);font-size:.96rem;line-height:1.5}
+  .slide.dark .card p{color:#9db3a6}
+  .pill{
+    display:inline-block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+    font-weight:700;color:var(--gold-muted);background:rgba(199,164,90,.12);
+    border:1px solid rgba(199,164,90,.35);padding:.22rem .6rem;border-radius:999px;
+  }
+  .num{font-family:var(--serif);font-size:1.5rem;color:var(--gold);font-weight:800;line-height:1}
+
+  ul.clean{list-style:none;display:flex;flex-direction:column;gap:.7rem}
+  ul.clean li{position:relative;padding-left:1.5rem;color:var(--text-2);font-size:1.02rem;line-height:1.45}
+  ul.clean li::before{content:"";position:absolute;left:0;top:.55em;width:7px;height:7px;border-radius:2px;background:var(--gold)}
+  .slide.dark ul.clean li::before{background:#4ade80}
+  ul.clean li strong{display:block;color:var(--ink);font-size:1.02rem;margin-bottom:.05rem}
+  .slide.dark ul.clean li strong{color:#e9f4ec}
+
+  code{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.84em;
+    background:var(--surface-soft);border:1px solid var(--border);border-radius:5px;padding:.08em .38em;color:var(--ink-soft)}
+  .slide.dark code{background:#122019;border-color:#2a3a32;color:#9db3a6}
+
+  /* ─── Diagram primitives ─────────────────────────────────────────── */
+  .diagram{display:flex;flex-direction:column;gap:0;align-items:stretch}
+  .node{
+    background:var(--surface);border:1.5px solid var(--border-strong);border-radius:12px;
+    padding:.8rem 1rem;text-align:center;box-shadow:var(--shadow-soft);
+    display:flex;flex-direction:column;gap:.18rem;justify-content:center;min-height:62px;
+  }
+  .node .t{font-weight:700;font-size:.98rem;color:var(--ink)}
+  .node .s{font-size:.76rem;color:var(--text-muted);font-family:"SF Mono",ui-monospace,monospace}
+  .node.gold{border-color:var(--gold);background:linear-gradient(180deg,#fffdf8,#fdf7ea)}
+  .node.gold .t{color:var(--gold-muted)}
+  .node.ink{background:var(--ink);border-color:var(--ink)}
+  .node.ink .t{color:#fff}
+  .node.ink .s{color:#c7cdd6}
+  .node.ext{background:var(--sky-soft);border-color:#b9d6ea}
+  .node.ext .t{color:#22566f}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:1.3rem;font-weight:700}
+  .arrow.v{height:30px}
+  .arrow.h{width:42px}
+  .lane{display:flex;align-items:center;gap:0}
+  .lane .node{flex:1}
+  .label-mid{font-size:.74rem;color:var(--text-muted);text-align:center;font-style:italic;padding:.1rem}
+
+  /* footer / chrome */
+  .foot{
+    position:absolute;left:6.2vw;right:6.2vw;bottom:3vh;display:flex;
+    align-items:center;justify-content:space-between;
+    font-size:.74rem;color:var(--text-muted);letter-spacing:.08em;
+  }
+  .slide.dark .foot{color:#708778}
+  .foot .brand{font-weight:700;letter-spacing:.2em;text-transform:uppercase}
+  .foot .brand b{color:var(--gold-muted)}
+  .slide.dark .foot .brand b{color:#4ade80}
+
+  .nav{position:fixed;bottom:2.2vh;left:50%;transform:translateX(-50%);
+    display:flex;gap:.5rem;align-items:center;z-index:50}
+  .dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.32);
+    border:none;cursor:pointer;padding:0;transition:all .2s}
+  .dot.on{background:var(--gold);width:22px;border-radius:5px}
+  .counter{position:fixed;top:2.4vh;right:3vw;font-size:.8rem;color:rgba(255,255,255,.55);
+    letter-spacing:.15em;z-index:50;font-family:"SF Mono",ui-monospace,monospace}
+  .hint{position:fixed;bottom:2.2vh;right:3vw;font-size:.72rem;color:rgba(255,255,255,.4);z-index:50}
+
+  /* title slide */
+  .hero{position:relative;background:
+      radial-gradient(120% 80% at 50% -10%, rgba(199,164,90,.12), transparent 60%),
+      linear-gradient(180deg,#fbfaf6,#f3eee2);}
+  .hero .colonnade{
+    position:absolute;inset:0;opacity:.5;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 7%, rgba(120,110,80,.10) 7% 7.5%, transparent 7.5% 14%);
+    -webkit-mask:linear-gradient(180deg,transparent,#000 18%,#000 60%,transparent 92%);
+            mask:linear-gradient(180deg,transparent,#000 18%,#000 60%,transparent 92%);
+  }
+  .hero .pediment{
+    position:absolute;top:8%;left:50%;transform:translateX(-50%);
+    width:46%;height:0;border-left:9vw solid transparent;border-right:9vw solid transparent;
+    border-bottom:5vw solid rgba(120,110,80,.10);
+  }
+  .badge{display:inline-flex;align-items:center;gap:.6rem;font-size:.74rem;
+    letter-spacing:.22em;text-transform:uppercase;font-weight:700;color:var(--gold-muted);
+    border:1px solid var(--gold-soft);border-radius:999px;padding:.45rem 1rem;margin-bottom:1.8rem;background:rgba(255,255,255,.6)}
+
+  /* tech grid */
+  .tech{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+  .tech .card{padding:1.1rem 1.2rem}
+  .tech .ver{font-family:"SF Mono",ui-monospace,monospace;color:var(--gold-muted);font-size:.8rem;font-weight:700}
+
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:0;border-radius:16px;overflow:hidden;border:1px solid var(--border)}
+  .compare > div{padding:1.5rem 1.6rem}
+  .compare .light{background:linear-gradient(180deg,#fffdf8,#f7f1e4)}
+  .compare .darkp{background:#070d0a;color:#e9f4ec}
+  .swatch{display:inline-block;width:18px;height:18px;border-radius:5px;margin-right:.5rem;vertical-align:-3px;border:1px solid rgba(0,0,0,.15)}
+
+  @media (max-width:900px){.two,.compare{grid-template-columns:1fr}.three,.four,.tech{grid-template-columns:1fr 1fr}}
+
+  /* ─── Print → one 16:9 landscape page per slide (for PDF export) ───── */
+  @media print {
+    @page { size: 13.333in 7.5in; margin: 0; }
+    html, body { height:auto !important; overflow:visible !important; background:#fff !important; }
+    .deck { position:static !important; display:block !important; }
+    .nav, .hint, .counter { display:none !important; }
+    .slide {
+      position:relative !important; inset:auto !important;
+      display:flex !important; opacity:1 !important;
+      width:13.333in !important; height:7.5in !important;
+      break-after:page; page-break-after:always; break-inside:avoid;
+      overflow:hidden;
+    }
+    .slide:last-child { break-after:auto; page-break-after:auto; }
+    * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- 1 · TITLE -->
+  <section class="slide hero">
+    <div class="colonnade"></div><div class="pediment"></div>
+    <div class="grow" style="position:relative">
+      <span class="badge">⚖ Hack the Law 2026 · Legora Challenge</span>
+      <h1>The Sparring Room</h1>
+      <p class="lead" style="margin-top:1.3rem;font-size:clamp(1.15rem,1.9vw,1.6rem);color:var(--text)">
+        A voice-first legal-negotiation trainer.<br/>
+        <span class="gold" style="font-style:italic">Not an assistant. A sparring partner.</span>
+      </p>
+      <div class="row" style="margin-top:2.4rem">
+        <span class="pill">Team SILK</span>
+        <span class="pill">Voice · Claude · Nemotron</span>
+        <span class="pill">Next.js 16</span>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>Repo review · architecture · stack</span></div>
+  </section>
+
+  <!-- 2 · PROBLEM -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>The problem</div>
+    <div class="grow two">
+      <div>
+        <h2>The apprenticeship is thinning.</h2>
+        <p class="lead" style="margin-top:1.2rem">
+          Juniors used to learn by doing the grunt work — drafting, marking up, arguing small points.
+          As AI absorbs that work, the <strong>reps that built judgement disappear</strong>.
+        </p>
+      </div>
+      <div class="card">
+        <span class="pill">The gap</span>
+        <h3 style="margin:.8rem 0 .6rem">You can't learn to negotiate by reading.</h3>
+        <ul class="clean">
+          <li>No safe place to argue out loud and lose</li>
+          <li>No opponent that <strong>holds its ground</strong> instead of agreeing</li>
+          <li>No immediate, grounded feedback on what you missed</li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>02</span></div>
+  </section>
+
+  <!-- 3 · THESIS -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>The thesis</div>
+    <h2 style="max-width:24ch">Deliberate practice against genuine resistance.</h2>
+    <div class="grow three" style="flex:none;margin-top:2rem">
+      <div class="card"><div class="num">01</div><h3 style="margin:.5rem 0">Negotiate out loud</h3><p>Real-time spoken argument against an AI opposing counsel that doesn't fold.</p></div>
+      <div class="card"><div class="num">02</div><h3 style="margin:.5rem 0">Stay coherent</h3><p>An explicit game-state layer tracks positions &amp; concessions — it never forgets what was agreed three turns ago.</p></div>
+      <div class="card"><div class="num">03</div><h3 style="margin:.5rem 0">Get coached</h3><p>At round end the AI flips to coach — scores you against a model playbook, names the turning point, offers a rematch.</p></div>
+    </div>
+    <p class="lead" style="margin-top:2rem;font-style:italic;color:var(--gold-muted)">A well-defined task · immediate feedback · unlimited reps.</p>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>03</span></div>
+  </section>
+
+  <!-- 4 · SCENARIO -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>The demo scenario</div>
+    <div class="grow two">
+      <div>
+        <h2>Marlin Health Trust <span class="muted">v</span> Nemo</h2>
+        <p class="lead" style="margin-top:1rem">
+          A <strong>Data Processing Agreement</strong> for running children's health records through an AI
+          diagnostics company. You act for Marlin — the data controller — and defend the GDPR clauses.
+        </p>
+        <div class="row" style="margin-top:1.4rem">
+          <span class="pill">GDPR Art 28(3)</span><span class="pill">Art 9(2)</span>
+          <span class="pill">Breach notification</span>
+        </div>
+      </div>
+      <div class="card" style="border-color:var(--gold-soft);background:linear-gradient(180deg,#fffdf8,#fdf7ea)">
+        <span class="pill">The trap</span>
+        <h3 style="margin:.7rem 0 .5rem">A baited "Warranties" clause</h3>
+        <p>One clause is deliberately weak. The adversary asks <em>"why did you pick this?"</em> —
+          rewarding juniors who spot it, exposing those who don't. Gold-standard answers are
+          graded behind the scenes and <strong>never shown</strong> during the fight.</p>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>04 · data/cases.ts</span></div>
+  </section>
+
+  <!-- 5 · JUNIOR JOURNEY -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>The junior journey</div>
+    <h2>One mounted voice session, a seven-step wizard.</h2>
+    <div class="grow" style="flex:none;margin-top:2.2rem">
+      <div class="lane" style="flex-wrap:wrap;gap:.2rem">
+        <div class="node"><span class="t">Choose role</span><span class="s">Junior</span></div>
+        <div class="arrow h">›</div>
+        <div class="node"><span class="t">Case</span><span class="s">Marlin v Nemo</span></div>
+        <div class="arrow h">›</div>
+        <div class="node"><span class="t">Opponent</span><span class="s">persona × difficulty</span></div>
+        <div class="arrow h">›</div>
+        <div class="node"><span class="t">Clauses</span><span class="s">what to defend</span></div>
+        <div class="arrow h">›</div>
+        <div class="node gold"><span class="t">Round</span><span class="s">voice / typed</span></div>
+        <div class="arrow h">›</div>
+        <div class="node ink"><span class="t">Debrief</span><span class="s">scored report</span></div>
+      </div>
+      <p class="label-mid" style="margin-top:1.4rem">
+        The whole UI is one client component (<code>app/page.tsx</code>) wrapped in a single ElevenLabs
+        <code>&lt;ConversationProvider&gt;</code> so the live voice session stays mounted across every step.
+      </p>
+    </div>
+    <div class="row" style="margin-top:1.8rem;justify-content:center">
+      <span class="pill">Go Again ↺ one-click rematch</span>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>05</span></div>
+  </section>
+
+  <!-- 6 · TWO USER TYPES -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>Two user types</div>
+    <div class="grow two">
+      <div class="card">
+        <span class="pill">Junior · plays</span>
+        <h3 style="margin:.8rem 0 .6rem">The trainee</h3>
+        <ul class="clean">
+          <li>Picks case, opponent and clauses</li>
+          <li>Argues a live round — voice or typed</li>
+          <li>Reads the scored debrief, hits <strong>Go Again</strong></li>
+        </ul>
+      </div>
+      <div class="card">
+        <span class="pill">Admin · authors</span>
+        <h3 style="margin:.8rem 0 .6rem">The senior lawyer</h3>
+        <ul class="clean">
+          <li>Uploads a firm playbook → simulated build</li>
+          <li>Tests the generated game, or re-uploads</li>
+          <li>Amend chat: <em>"make the opponent more aggressive"</em></li>
+        </ul>
+        <p class="muted" style="margin-top:.9rem;font-size:.84rem">
+          ⓘ Admin upload &amp; amend are <strong>Wizard-of-Oz</strong> today — framework &amp; UX are real;
+          document-driven generation is the next seam.
+        </p>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>06 · UserTypeScreen.tsx</span></div>
+  </section>
+
+  <!-- 7 · SYSTEM ARCHITECTURE -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>System architecture</div>
+    <h2 style="font-size:clamp(1.6rem,3vw,2.4rem)">One Next.js app · three external brains · a read-only rulebook.</h2>
+    <div class="grow" style="margin-top:1.4rem">
+      <div class="lane" style="gap:0">
+        <!-- col 1 client -->
+        <div style="flex:1.05">
+          <div class="node ink"><span class="t">Browser client</span><span class="s">app/page.tsx · React 19</span></div>
+          <p class="label-mid">voice · typed · admin</p>
+        </div>
+        <div class="arrow h">↔</div>
+        <!-- col 2 api -->
+        <div style="flex:1.25">
+          <div class="node gold"><span class="t">Next.js API routes</span><span class="s">app/api/*</span></div>
+          <div style="margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem">
+            <div class="node" style="min-height:0;padding:.4rem"><span class="s">/api/llm · voice SSE shim</span></div>
+            <div class="node" style="min-height:0;padding:.4rem"><span class="s">/api/adversary · /api/coach</span></div>
+            <div class="node" style="min-height:0;padding:.4rem"><span class="s">/api/elevenlabs/signed-url</span></div>
+          </div>
+        </div>
+        <div class="arrow h">↔</div>
+        <!-- col 3 lib -->
+        <div style="flex:1">
+          <div class="node"><span class="t">lib/ gateway</span><span class="s">llm · setup · coach · skill</span></div>
+          <p class="label-mid">prompt assembly + brain routing</p>
+        </div>
+        <div class="arrow h">↔</div>
+        <!-- col 4 externals -->
+        <div style="flex:1;display:flex;flex-direction:column;gap:.4rem">
+          <div class="node ext"><span class="t">Anthropic</span><span class="s">Claude</span></div>
+          <div class="node ext"><span class="t">ElevenLabs</span><span class="s">voice ASR/TTS</span></div>
+          <div class="node ext"><span class="t">OpenRouter</span><span class="s">Nemotron</span></div>
+        </div>
+      </div>
+      <div class="arrow v">↑</div>
+      <div class="node gold" style="max-width:420px;margin:0 auto"><span class="t">DEMO DATA/ · firm rulebook</span><span class="s">lib/skill.ts reads .md once at boot</span></div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>07 · No database · React hooks only</span></div>
+  </section>
+
+  <!-- 8 · VOICE SPINE -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>The voice spine — the headline trick</div>
+    <h2 style="font-size:clamp(1.5rem,2.8vw,2.2rem)">ElevenLabs thinks it's calling OpenAI. It's actually calling Claude.</h2>
+    <div class="grow" style="margin-top:1rem">
+      <div class="lane" style="flex-wrap:wrap;gap:.15rem">
+        <div class="node"><span class="t">🎙 Mic</span><span class="s">user speaks</span></div>
+        <div class="arrow h">›</div>
+        <div class="node ext"><span class="t">ElevenLabs agent</span><span class="s">ASR + turn-taking</span></div>
+        <div class="arrow h">›</div>
+        <div class="node gold"><span class="t">/api/llm shim</span><span class="s">OpenAI /v1/chat/completions</span></div>
+        <div class="arrow h">›</div>
+        <div class="node ink"><span class="t">Claude</span><span class="s">streamBrain()</span></div>
+      </div>
+      <div class="lane" style="margin-top:.5rem;justify-content:center">
+        <p class="label-mid">shim assembles real prompt:&nbsp; <code>resolveSetup → bumpTurn → buildHotSeatSystem → streamBrain</code></p>
+      </div>
+      <div class="arrow v">↓ &nbsp; re-encoded as OpenAI <code>chat.completion.chunk</code> SSE frames</div>
+      <div class="lane" style="flex-wrap:wrap;gap:.15rem">
+        <div class="node ink"><span class="t">Claude tokens</span><span class="s">streaming</span></div>
+        <div class="arrow h">›</div>
+        <div class="node gold"><span class="t">/api/llm shim</span><span class="s">SSE chunks back</span></div>
+        <div class="arrow h">›</div>
+        <div class="node ext"><span class="t">ElevenLabs TTS</span><span class="s">spoken</span></div>
+        <div class="arrow h">›</div>
+        <div class="node"><span class="t">🔊 "The Technician"</span><span class="s">user hears</span></div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>08 · app/api/llm/v1/chat/completions/route.ts</span></div>
+  </section>
+
+  <!-- 9 · INSIDE THE SHIM -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>Inside the shim</div>
+    <div class="grow two">
+      <div>
+        <h2 style="font-size:clamp(1.6rem,3vw,2.3rem)">An OpenAI-compatible translation layer.</h2>
+        <p class="lead" style="margin-top:1rem">
+          The shim speaks OpenAI on the wire and Anthropic underneath — so any Custom-LLM
+          voice platform plugs straight in.
+        </p>
+      </div>
+      <ul class="clean" style="gap:1.1rem">
+        <li><strong>Format translation</strong><code>lib/openaiCompat.ts</code> maps OpenAI chat ⇄ Claude messages, enforces Anthropic's "must start with a user turn" rule.</li>
+        <li><strong>Barge-in &amp; disconnect safe</strong>handles the client cutting in or dropping mid-stream without orphaning the Claude call.</li>
+        <li><strong>Effectively stateless</strong>ElevenLabs resends full history each turn, so <code>lib/gameState.ts</code> only counts turns — a documented swap point for a Neo4j argument graph.</li>
+        <li><strong>Key stays server-side</strong><code>/api/elevenlabs/signed-url</code> mints the WebSocket URL so the ElevenLabs key never reaches the browser.</li>
+      </ul>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>09</span></div>
+  </section>
+
+  <!-- 10 · DUAL BRAIN -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>One interface, two brains</div>
+    <h2>Cloud or Sovereign — same prompt, swappable engine.</h2>
+    <div class="grow" style="margin-top:1.2rem">
+      <div class="lane" style="justify-content:center">
+        <div class="node gold" style="max-width:340px"><span class="t">lib/llm.ts · brain gateway</span><span class="s">streamBrain() / generateBrain()</span></div>
+      </div>
+      <div class="lane" style="justify-content:center;gap:5rem;margin:.2rem 0">
+        <div class="arrow v">↙</div><div class="arrow v">↘</div>
+      </div>
+      <div class="two" style="gap:2rem">
+        <div class="card">
+          <span class="pill">Cloud · default</span>
+          <h3 style="margin:.7rem 0 .5rem">Claude</h3>
+          <p><code>@anthropic-ai/sdk</code> · <code>claude-sonnet-4-6</code><br/>
+          Prompt-cached rulebook (<code>cache_control: ephemeral</code>), <code>thinking: disabled</code>, low effort.</p>
+        </div>
+        <div class="card" style="background:#070d0a;border-color:#2a3a32;color:#e9f4ec">
+          <span class="pill" style="color:#4ade80;border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.12)">Local · Sovereign</span>
+          <h3 style="margin:.7rem 0 .5rem;color:#e9f4ec">NVIDIA Nemotron</h3>
+          <p style="color:#9db3a6"><code style="background:#122019;border-color:#2a3a32;color:#9db3a6">openai</code> SDK → OpenRouter · <code style="background:#122019;border-color:#2a3a32;color:#9db3a6">nemotron-3-super-120b</code> · strips <code style="background:#122019;border-color:#2a3a32;color:#9db3a6">&lt;think&gt;</code> reasoning.</p>
+        </div>
+      </div>
+      <p class="label-mid" style="margin-top:1rem">Graceful fallback to Claude (<code>fellBack: true</code>) if Local is down · UI <code>EngineToggle.tsx</code> flips engine <em>and</em> a dark green-neon theme.</p>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>10 · lib/llm.ts</span></div>
+  </section>
+
+  <!-- 11 · GROUNDING -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>Grounded by a firm rulebook</div>
+    <div class="grow two">
+      <div>
+        <h2 style="font-size:clamp(1.6rem,3vw,2.3rem)">The AI argues from the firm's own playbook.</h2>
+        <p class="lead" style="margin-top:1rem">
+          <code>lib/skill.ts</code> loads the firm's markdown — method, DP checklist, gold-standard
+          playbook — <strong>once at boot</strong>. It's the source of truth for how the AI questions and grades.
+        </p>
+        <p class="muted" style="margin-top:1rem;font-size:.9rem">Drop any <code>.md</code> into <code>DEMO DATA/</code> and it's auto-appended to the rulebook.</p>
+      </div>
+      <div class="diagram">
+        <div class="node gold"><span class="t">buildHotSeatSystem()</span><span class="s">lib/setup.ts</span></div>
+        <div class="arrow v">splits into</div>
+        <div class="lane" style="gap:.8rem">
+          <div class="node" style="flex:1"><span class="t">📚 Rulebook block</span><span class="s">cached · cache_control</span></div>
+          <div class="node" style="flex:1"><span class="t">⚡ Instructions</span><span class="s">volatile · per-turn setup</span></div>
+        </div>
+        <p class="label-mid" style="margin-top:1rem">Big stable prefix is cached; only the small volatile tail changes per turn → fast, cheap streaming.</p>
+        <div class="card" style="margin-top:1rem;border-color:var(--gold-soft);background:#fffdf8;padding:1rem 1.1rem">
+          <p><strong>🔒 Gold standards are NEVER shown to the user</strong> during the fight — only the coach reveals them, after.</p>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>11 · lib/skill.ts · lib/setup.ts</span></div>
+  </section>
+
+  <!-- 12 · ADVERSARY -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>The adversary — "The Technician"</div>
+    <div class="grow two">
+      <div>
+        <h2>It only asks questions.</h2>
+        <p class="lead" style="margin-top:1rem">
+          A live Socratic interrogator: short, sharp turns; never reveals the gold standard;
+          always pushes a legal point through to its <strong>commercial consequence</strong>.
+          Holds its pushback defences — it does not fold.
+        </p>
+        <p class="muted" style="margin-top:.9rem;font-size:.9rem">prompts/hotseat.ts</p>
+      </div>
+      <div>
+        <h3 style="margin-bottom:.7rem">Persona × Difficulty</h3>
+        <div class="row" style="margin-bottom:.6rem">
+          <span class="pill">Opposing Counsel</span><span class="pill">Stonewaller</span><span class="pill">Charmer</span>
+        </div>
+        <div class="row" style="margin-bottom:1rem">
+          <span class="pill" style="color:var(--ink);border-color:var(--border-strong);background:var(--surface-soft)">Associate</span>
+          <span class="pill" style="color:var(--ink);border-color:var(--border-strong);background:var(--surface-soft)">Partner</span>
+          <span class="pill" style="color:var(--ink);border-color:var(--border-strong);background:var(--surface-soft)">Shark</span>
+        </div>
+        <div class="card">
+          <p>Persona &amp; difficulty modifiers are appended to the adversary prompt — same brain,
+          different temperament and ferocity. Voice runs through <code>/api/llm</code>; the typed
+          fallback uses <code>/api/adversary</code> with no tunnel needed.</p>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>12 · prompts/hotseat.ts · personas.ts · difficulties.ts</span></div>
+  </section>
+
+  <!-- 13 · COACH -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>The coach — the only phase that gives answers</div>
+    <div class="grow two" style="gap:2rem">
+      <div>
+        <h2>A scored, Socratic debrief.</h2>
+        <div class="diagram" style="margin-top:1.3rem">
+          <div class="node"><span class="t">Transcript</span><span class="s">captured client-side</span></div>
+          <div class="arrow v">↓</div>
+          <div class="node gold"><span class="t">/api/coach → scoreRound()</span><span class="s">lib/coach.ts</span></div>
+          <div class="arrow v">↓ Claude · parse · Zod-validate · retry once</div>
+          <div class="node ink"><span class="t">CoachResult</span><span class="s">DebriefView.tsx</span></div>
+          <div class="arrow v">↓</div>
+          <div class="node"><span class="t">↺ Go Again</span><span class="s">rematch</span></div>
+        </div>
+      </div>
+      <div>
+        <h3 style="margin-bottom:.8rem">What the card shows</h3>
+        <ul class="clean">
+          <li><strong>0–100 health score</strong>graded vs the rulebook's gold-standard answers</li>
+          <li><strong>Four-part consequences</strong>civil · GDPR · financial · reputational</li>
+          <li><strong>Gaps &amp; faulty assumptions</strong>issue → legal → commercial, traps picked</li>
+          <li><strong>Learning points</strong>"before you go back" — then rematch</li>
+        </ul>
+        <p class="muted" style="margin-top:1rem;font-size:.84rem">Zod-validated <code>CoachResult</code> — a documented swap point for an independent Nemotron judge.</p>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>13 · lib/coach.ts · prompts/coach.ts</span></div>
+  </section>
+
+  <!-- 14 · TECH STACK -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>Tech stack</div>
+    <h2>Lean, modern, voice-native.</h2>
+    <div class="grow tech" style="flex:none;margin-top:1.8rem">
+      <div class="card"><span class="ver">16.2.9</span><h3 style="margin:.3rem 0">Next.js</h3><p>App Router · the "non-standard" v16 <code>AGENTS.md</code> warns about</p></div>
+      <div class="card"><span class="ver">19.2.4</span><h3 style="margin:.3rem 0">React</h3><p>Single stateful client component, hooks only</p></div>
+      <div class="card"><span class="ver">5.x</span><h3 style="margin:.3rem 0">TypeScript</h3><p>Strict · <code>@/*</code> path alias</p></div>
+      <div class="card"><span class="ver">^0.106</span><h3 style="margin:.3rem 0">Anthropic SDK</h3><p>Claude — adversary &amp; coach · prompt caching</p></div>
+      <div class="card"><span class="ver">^1.9</span><h3 style="margin:.3rem 0">@elevenlabs/react</h3><p>Conversational AI — ASR · TTS · turn-taking</p></div>
+      <div class="card"><span class="ver">^6.45</span><h3 style="margin:.3rem 0">openai SDK</h3><p>Pointed at OpenRouter → NVIDIA Nemotron</p></div>
+      <div class="card"><span class="ver">v4</span><h3 style="margin:.3rem 0">Tailwind</h3><p>CSS-first · tokens in <code>globals.css</code></p></div>
+      <div class="card"><span class="ver">^4.4</span><h3 style="margin:.3rem 0">Zod</h3><p>Validates the structured coach output</p></div>
+      <div class="card"><span class="ver">tsx · bash</span><h3 style="margin:.3rem 0">Dev harness</h3><p><code>npm run harness</code> · <code>npm run voice</code> (ngrok)</p></div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>14 · package.json</span></div>
+  </section>
+
+  <!-- 15 · DESIGN SYSTEM -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>Design system</div>
+    <h2>An institutional Greek theme — that goes dark in Sovereign mode.</h2>
+    <div class="grow" style="margin-top:1.4rem">
+      <div class="compare">
+        <div class="light">
+          <span class="pill">Cloud · default</span>
+          <h3 style="margin:.7rem 0;font-family:var(--serif)">Marble &amp; gold</h3>
+          <p style="color:var(--text-2)"><span class="swatch" style="background:#c7a45a"></span>Greek gold <code>#c7a45a</code></p>
+          <p style="color:var(--text-2);margin-top:.4rem"><span class="swatch" style="background:#111827"></span>Ink <code>#111827</code> · serif headings (Playfair)</p>
+          <p style="color:var(--text-2);margin-top:.4rem">Greek-hall hero · mic orb · voice visualizer</p>
+        </div>
+        <div class="darkp">
+          <span class="pill" style="color:#4ade80;border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.12)">Local · Sovereign</span>
+          <h3 style="margin:.7rem 0;font-family:var(--serif);color:#e9f4ec">Black &amp; green-neon</h3>
+          <p style="color:#9db3a6"><span class="swatch" style="background:#4ade80;border-color:rgba(255,255,255,.2)"></span>Neon green <code style="background:#122019;border-color:#2a3a32;color:#9db3a6">#4ade80</code></p>
+          <p style="color:#9db3a6;margin-top:.4rem"><span class="swatch" style="background:#070d0a;border-color:rgba(255,255,255,.2)"></span>Near-black <code style="background:#122019;border-color:#2a3a32;color:#9db3a6">#070d0a</code></p>
+          <p style="color:#9db3a6;margin-top:.4rem">Same layout — <code style="background:#122019;border-color:#2a3a32;color:#9db3a6">.engine-dark</code> overrides only the tokens</p>
+        </div>
+      </div>
+      <p class="label-mid" style="margin-top:1.2rem">The visual identity <em>is</em> the engine story: Cloud feels institutional; the Sovereign/Local brain literally darkens the room.</p>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>15 · app/globals.css · Style_spec/</span></div>
+  </section>
+
+  <!-- 16 · SEAMS -->
+  <section class="slide">
+    <div class="eyebrow"><span class="kicker-rule"></span>Built to extend</div>
+    <h2>Every placeholder is a labelled seam.</h2>
+    <div class="grow four" style="flex:none;margin-top:1.8rem">
+      <div class="card"><span class="pill">State</span><h3 style="margin:.5rem 0;font-size:1.1rem">Neo4j argument graph</h3><p>Replaces the turn-counter in <code>gameState.ts</code> for true memory.</p></div>
+      <div class="card"><span class="pill">Grounding</span><h3 style="margin:.5rem 0;font-size:1.1rem">EU Cellar API</h3><p>Live GDPR text via <code>fetchGrounding()</code> in <code>data/grounding.ts</code>.</p></div>
+      <div class="card"><span class="pill">Research</span><h3 style="margin:.5rem 0;font-size:1.1rem">Perplexity Sonar</h3><p>Unused <code>research</code> role already wired in the gateway.</p></div>
+      <div class="card"><span class="pill">Scoring</span><h3 style="margin:.5rem 0;font-size:1.1rem">Independent judge</h3><p>Swap the coach for a separate Nemotron grader.</p></div>
+    </div>
+    <div class="card" style="margin-top:1.4rem;border-color:var(--gold-soft);background:#fffdf8">
+      <p><strong>Next big step:</strong> document-driven admin generation — turn an uploaded firm playbook into a real, custom game instead of the Wizard-of-Oz placeholder.</p>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b></span><span>16</span></div>
+  </section>
+
+  <!-- 17 · CLOSING -->
+  <section class="slide hero">
+    <div class="colonnade"></div>
+    <div class="grow" style="position:relative">
+      <div class="eyebrow"><span class="kicker-rule"></span>The Sparring Room</div>
+      <h1 style="font-size:clamp(2rem,4.6vw,3.8rem);max-width:18ch">Voice in. Resistance back. Judgement built.</h1>
+      <p class="lead" style="margin-top:1.4rem;color:var(--text)">
+        A grounded AI opponent that holds its ground, a coach that scores you against the firm's own
+        playbook, and a single tap to <span class="gold" style="font-style:italic">go again</span>.
+      </p>
+      <div class="row" style="margin-top:2.2rem">
+        <span class="pill">ElevenLabs voice</span><span class="pill">Claude · Nemotron</span>
+        <span class="pill">Next.js 16 · React 19</span><span class="pill">Zod-graded debrief</span>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">Team <b>SILK</b> · Hack the Law 2026</span><span>↺ Not an assistant. A sparring partner.</span></div>
+  </section>
+
+</div>
+
+<div class="counter" id="counter">01 / 17</div>
+<div class="nav" id="nav"></div>
+<div class="hint">← → · space · click</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const nav = document.getElementById('nav');
+  const counter = document.getElementById('counter');
+  let i = 0;
+  slides.forEach((_, n) => {
+    const b = document.createElement('button');
+    b.className = 'dot'; b.onclick = () => go(n); nav.appendChild(b);
+  });
+  const dots = Array.from(nav.children);
+  function go(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    counter.textContent = String(i+1).padStart(2,'0') + ' / ' + String(slides.length).padStart(2,'0');
+    // body tint follows dark slides
+    document.body.style.background = slides[i].classList.contains('dark') ? '#070d0a' : '#0b0e14';
+  }
+  function next(){ go(i+1) } function prev(){ go(i-1) }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown'){ e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); prev(); }
+    else if (e.key === 'Home'){ go(0); } else if (e.key === 'End'){ go(slides.length-1); }
+  });
+  document.addEventListener('click', e => { if (e.target.closest('.dot')) return; next(); });
+  go(0);
+</script>
+</body>
+</html>

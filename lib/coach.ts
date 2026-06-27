@@ -2,15 +2,16 @@
  * lib/coach.ts — end-of-round DEBRIEF (shared by /api/coach and the harness).
  *
  * Grounded in the firm RULEBOOK (skill debrief format + playbook gold standard +
- * consequence framework), injected as a CACHED system block. The prompt demands
- * strict JSON, so we generate free-form (no constrained-decoding latency tax) and
- * validate with zod, retrying once. thinking off + effort low keeps it snappy.
+ * consequence framework), injected as a CACHED system block. We use CONSTRAINED
+ * decoding (Anthropic structured outputs on the Cloud path) so the reply is
+ * guaranteed schema-valid in ONE pass — no parse-then-retry latency tax, no
+ * intermittent 500s. zod stays as a final type guard. thinking off + effort low.
  *
  * SWAP point: natural home for an independent NVIDIA Nemotron judge later.
  */
 
 import { z } from "zod";
-import { generateBrain, type BrainId } from "./llm";
+import { generateStructured, type BrainId } from "./llm";
 import { RULEBOOK } from "./skill";
 import { getCase } from "../data/cases";
 import {
@@ -44,7 +45,14 @@ const CoachSchema = z.object({
   beforeYouGoBack: z.array(z.string()),
 });
 
-/** Score a round and return the structured debrief. Throws if both attempts fail. */
+/** JSON schema the model is constrained to (built once; objects are all-required + closed). */
+const COACH_JSON_SCHEMA = (() => {
+  const schema = z.toJSONSchema(CoachSchema) as Record<string, unknown>;
+  delete schema.$schema; // meta-annotation; not part of the output contract
+  return schema;
+})();
+
+/** Score a round and return the structured debrief. Throws once if the model can't be validated. */
 export async function scoreRound(
   transcript: Transcript,
   setupOrCaseId?: Partial<SessionSetup> | string,
@@ -61,42 +69,29 @@ export async function scoreRound(
   );
   const instructions = coachInstructions(caseData, transcript, chosenClauses);
 
-  async function attempt(nudge = ""): Promise<CoachResult | null> {
-    const text = await generateBrain({
-      brain,
-      role: "coach",
-      rulebook: RULEBOOK,
-      instructions,
-      maxTokens: 2000,
-      messages: [
-        {
-          role: "user",
-          content:
-            "Produce the debrief now as a single raw JSON object (no markdown, no code fences, no prose), in the exact required shape." +
-            nudge,
-        },
-      ],
-    });
+  // One constrained pass: the model is forced to the schema, so the reply parses
+  // and validates first time. zod is the final type guard, not a retry trigger.
+  const text = await generateStructured({
+    brain,
+    role: "coach",
+    rulebook: RULEBOOK,
+    instructions,
+    maxTokens: 1800,
+    jsonSchema: COACH_JSON_SCHEMA,
+    messages: [
+      {
+        role: "user",
+        content:
+          "Produce the debrief now as a single JSON object in the exact required shape.",
+      },
+    ],
+  });
 
-    // Be defensive: strip stray code fences / extract the JSON object.
-    const cleaned = text.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start === -1 || end === -1) return null;
-
-    try {
-      const parsed = JSON.parse(cleaned.slice(start, end + 1));
-      return CoachSchema.parse(parsed) as CoachResult;
-    } catch {
-      return null;
-    }
+  // Defensive on the Nemotron path (no constrained decoding): slice to the object.
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1) {
+    throw new Error("Coach returned no JSON object.");
   }
-
-  const first = await attempt();
-  if (first) return first;
-  const second = await attempt(
-    " Return ONLY valid JSON matching the exact required shape.",
-  );
-  if (second) return second;
-  throw new Error("Coach failed to return a valid debrief.");
+  return CoachSchema.parse(JSON.parse(text.slice(start, end + 1))) as CoachResult;
 }
