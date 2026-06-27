@@ -1,6 +1,6 @@
 # The Sparring Room
 
-*Hack the Law 2026 · Legora "Sparring Room" challenge · Team SILK*
+*Hack the Law 2026 · Legora "Sparring Room" challenge · Team SILK(adaeze njiaju, divine sanusi, edward xu)*
 
 A voice-first training ground where a lawyer practises real legal work against an AI
 that fights back — opposing counsel that argues, probes weak points, and doesn't fold
